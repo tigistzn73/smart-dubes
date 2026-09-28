@@ -28,7 +28,16 @@ router.post(
   initiateRepayment
 );
 
-router.post('/schedule', generateInstallmentSchedule);
-router.post('/schedule/apply', saveCustomerSchedule);
+const scheduleValidators = [
+  body('frequency').optional().isIn(['WEEKLY', 'MONTHLY']).withMessage('Invalid repayment frequency'),
+  body('numInstallments').optional().isInt({ min: 1, max: 24 }).withMessage('Installment count must be between 1 and 24'),
+  body('totalAmount').optional().isNumeric().withMessage('Total amount must be a number'),
+  body('txIds').optional().isArray().withMessage('txIds must be an array of Dube receipt IDs'),
+  body('txId').optional({ values: 'falsy' }).isInt({ min: 1 }).withMessage('txId must be a Dube receipt ID'),
+  validateResult
+];
+
+router.post('/schedule', scheduleValidators, generateInstallmentSchedule);
+router.post('/schedule/apply', scheduleValidators, saveCustomerSchedule);
 
 module.exports = router;

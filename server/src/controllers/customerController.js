@@ -1,6 +1,28 @@
 const db = require('../config/database');
 const { processRepayment, processMultiMerchantRepayment } = require('../services/paymentGatewayService');
 
+// pg hands back DATE columns as a Date at local midnight, so calling toISOString()
+// would roll the calendar day back for users east of UTC. Read the local parts instead.
+function toDateOnly(value) {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+  }
+  return String(value).split('T')[0];
+}
+
+// Same concern, but returns a local-midnight Date ready for calendar math
+function parseDateOnly(value) {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  }
+  const parts = String(value).split('-');
+  if (parts.length !== 3) return null;
+  const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 // Get Customer Balance and Dube Ledger Accounts
 async function getCustomerDashboard(req, res) {
   try {
@@ -50,7 +72,7 @@ async function getCustomerDashboard(req, res) {
         ...t,
         status: isSettled ? 'SETTLED' : t.status,
         remaining_amount: remaining,
-        due_date: t.due_date ? (t.due_date instanceof Date ? t.due_date.toISOString().split('T')[0] : String(t.due_date).split('T')[0]) : null,
+        due_date: toDateOnly(t.due_date),
         items: JSON.parse(t.items_json || '[]')
       };
     }));
@@ -186,20 +208,40 @@ async function initiateRepayment(req, res) {
 }
 
 // Flexible Repayment Installment Builder Calculator:
-// Monthly frequency: Spaced exactly 1 month apart on the same day-of-month (e.g. Aug 24 -> Sept 24).
-// Weekly frequency: Spaced exactly 1 week (7 days) apart (e.g. Sept 17 -> Sept 24).
-// Filters out any past dates relative to Today (2026-08-17).
-async function calculateFlexibleInstallments(userId, totalAmount, frequency, _unused, numInstallments, merchantId) {
+// Supports WEEKLY and MONTHLY frequencies.
+// Honors requested numInstallments, respects repayment deadline, and ensures all dates are >= today.
+async function calculateFlexibleInstallments(userId, totalAmount, frequency, _unused, numInstallments, merchantId, reqDeadlineDate, txId) {
   const amount = parseFloat(totalAmount);
   let numInst = parseInt(numInstallments || 2);
+  if (numInst < 1) numInst = 1;
 
-  // Today's date at local midnight (e.g. 2026-08-17)
+  // Today's date at local midnight
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // Fetch customer profile & actual repayment deadline from pending transactions
   let cp = null;
-  if (merchantId) {
+  let deadlineDate = null;
+
+  // 1. If txId is provided, fetch directly from credit_transactions
+  if (txId) {
+    const tx = await db.get(`SELECT * FROM credit_transactions WHERE id = $1`, [txId]);
+    if (tx) {
+      if (tx.due_date) {
+        deadlineDate = parseDateOnly(tx.due_date);
+      }
+      if (tx.customer_id) {
+        cp = await db.get(`SELECT id FROM customer_profiles WHERE id = $1`, [tx.customer_id]);
+      }
+    }
+  }
+
+  // 2. If reqDeadlineDate is explicitly provided
+  if ((!deadlineDate || isNaN(deadlineDate.getTime())) && reqDeadlineDate) {
+    deadlineDate = parseDateOnly(reqDeadlineDate);
+  }
+
+  // 3. Find customer profile if not yet found
+  if (!cp && merchantId) {
     cp = await db.get(`SELECT id FROM customer_profiles WHERE (user_id = $1 OR phone = (SELECT phone FROM users WHERE id = $1)) AND merchant_id = $2 LIMIT 1`, [userId, merchantId]);
   }
   if (!cp) {
@@ -214,82 +256,126 @@ async function calculateFlexibleInstallments(userId, totalAmount, frequency, _un
     cp = await db.get(`SELECT id FROM customer_profiles WHERE user_id = $1 OR phone = (SELECT phone FROM users WHERE id = $1) LIMIT 1`, [userId]);
   }
 
-  let deadlineDate = null;
-  if (cp) {
+  // 4. If deadlineDate still not found, search transactions
+  if ((!deadlineDate || isNaN(deadlineDate.getTime())) && cp) {
     const tx = await db.get(`
       SELECT due_date FROM credit_transactions
       WHERE customer_id = $1 AND status IN ('PENDING', 'PARTIALLY_PAID') AND due_date IS NOT NULL
-      ORDER BY due_date ASC LIMIT 1
-    `, [cp.id]);
+      ORDER BY (CASE WHEN ABS(total_amount - $2) < 0.01 THEN 0 ELSE 1 END), due_date DESC LIMIT 1
+    `, [cp.id, amount]);
     if (tx && tx.due_date) {
-      const isoStr = tx.due_date instanceof Date ? tx.due_date.toISOString().split('T')[0] : String(tx.due_date).split('T')[0];
-      const parts = isoStr.split('-');
-      deadlineDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+      deadlineDate = parseDateOnly(tx.due_date);
     }
   }
 
-  // Fallback: if no deadline found, default to end of current month
+  // Fallback: if no deadline found, default to 14 days from today
   if (!deadlineDate || isNaN(deadlineDate.getTime())) {
-    deadlineDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    deadlineDate = new Date(today);
+    deadlineDate.setDate(deadlineDate.getDate() + 14);
   }
   deadlineDate.setHours(0, 0, 0, 0);
 
-  // If deadline is in the past relative to today, clamp to today
+  // If deadline is in the past, move it forward
   if (deadlineDate < today) {
     deadlineDate = new Date(today);
+    deadlineDate.setDate(deadlineDate.getDate() + 7);
   }
 
-  const deadlineDay = deadlineDate.getDate();
-  const deadlineMonth = deadlineDate.getMonth();
-  const deadlineYear = deadlineDate.getFullYear();
+  // Generate valid installment dates based on frequency, numInst, and deadlineDate
+  let installmentDates = [];
 
-  const rawDates = [];
+  if (frequency === 'WEEKLY') {
+    // Try counting backward from deadlineDate (step = 7 days)
+    const backwardDates = [];
+    for (let i = numInst - 1; i >= 0; i--) {
+      const d = new Date(deadlineDate);
+      d.setDate(deadlineDate.getDate() - i * 7);
+      backwardDates.push(d);
+    }
 
-  for (let i = numInst - 1; i >= 0; i--) {
-    let d;
-    if (frequency === 'WEEKLY') {
-      // Weekly: go back i * 7 days from deadline
-      d = new Date(deadlineDate);
-      d.setDate(deadlineDay - i * 7);
+    // If the earliest backward date is >= today, all installments fit cleanly up to the deadline
+    if (backwardDates[0] >= today) {
+      installmentDates = backwardDates;
     } else {
-      // Monthly: go back i months from deadline, pinning to the SAME day-of-month
-      const targetMonth = deadlineMonth - i;
-      const targetYear = deadlineYear + Math.floor(targetMonth / 12);
+      // If going backward lands before today (e.g. numInst is too large for remaining days),
+      // space them between today and deadline if possible, or forward weekly
+      const diffDays = Math.round((deadlineDate - today) / (1000 * 60 * 60 * 24));
+      if (diffDays >= numInst) {
+        const interval = diffDays / numInst;
+        for (let i = 1; i <= numInst; i++) {
+          const d = new Date(today);
+          d.setDate(today.getDate() + Math.round(i * interval));
+          installmentDates.push(d);
+        }
+      } else {
+        for (let i = 1; i <= numInst; i++) {
+          const d = new Date(today);
+          d.setDate(today.getDate() + i * 7);
+          installmentDates.push(d);
+        }
+      }
+    }
+  } else {
+    // MONTHLY frequency
+    const backwardDates = [];
+    const dlDay = deadlineDate.getDate();
+    const dlMonth = deadlineDate.getMonth();
+    const dlYear = deadlineDate.getFullYear();
+
+    for (let i = numInst - 1; i >= 0; i--) {
+      const targetMonth = dlMonth - i;
+      const targetYear = dlYear + Math.floor(targetMonth / 12);
       const normalizedMonth = ((targetMonth % 12) + 12) % 12;
       const lastDayOfMonth = new Date(targetYear, normalizedMonth + 1, 0).getDate();
-      const targetDay = Math.min(deadlineDay, lastDayOfMonth);
-      d = new Date(targetYear, normalizedMonth, targetDay);
+      const targetDay = Math.min(dlDay, lastDayOfMonth);
+      backwardDates.push(new Date(targetYear, normalizedMonth, targetDay));
     }
-    rawDates.push(d);
+
+    if (backwardDates[0] >= today) {
+      installmentDates = backwardDates;
+    } else {
+      // Going backward lands in past; schedule forward from deadlineDate
+      installmentDates = [];
+      const baseDate = deadlineDate > today ? new Date(deadlineDate) : new Date(today);
+      for (let i = 0; i < numInst; i++) {
+        const targetMonth = baseDate.getMonth() + i;
+        const targetYear = baseDate.getFullYear() + Math.floor(targetMonth / 12);
+        const normalizedMonth = ((targetMonth % 12) + 12) % 12;
+        const lastDayOfMonth = new Date(targetYear, normalizedMonth + 1, 0).getDate();
+        const targetDay = Math.min(baseDate.getDate(), lastDayOfMonth);
+        installmentDates.push(new Date(targetYear, normalizedMonth, targetDay));
+      }
+    }
   }
 
-  // Filter out any dates that are strictly in the past relative to today (before 2026-08-17)
-  let validDates = rawDates.filter(d => d >= today);
+  // Ensure dates are sorted chronologically
+  installmentDates.sort((a, b) => a - b);
 
-  // Fallback: if all dates were in past, use deadlineDate
-  if (validDates.length === 0) {
-    validDates = [new Date(deadlineDate)];
-  }
-
-  const actualNumInst = validDates.length;
-  const perInstallment = amount / actualNumInst;
+  // Build installments array with exact penny-perfect total
+  const perInstallment = Math.floor((amount / installmentDates.length) * 100) / 100;
+  let remainingAmount = amount;
   const installments = [];
 
-  for (let i = 0; i < validDates.length; i++) {
-    const dueDate = validDates[i];
+  for (let i = 0; i < installmentDates.length; i++) {
+    const dueDate = installmentDates[i];
     const y = dueDate.getFullYear();
     const m = String(dueDate.getMonth() + 1).padStart(2, '0');
     const dayStr = String(dueDate.getDate()).padStart(2, '0');
+
+    const isLast = (i === installmentDates.length - 1);
+    const instAmount = isLast ? parseFloat(remainingAmount.toFixed(2)) : perInstallment;
+    remainingAmount = parseFloat((remainingAmount - instAmount).toFixed(2));
+
     installments.push({
       installmentNo: i + 1,
       dueDate: `${y}-${m}-${dayStr}`,
-      amount: parseFloat(perInstallment.toFixed(2)),
+      amount: instAmount,
       status: 'SCHEDULED'
     });
   }
 
-  const dl = deadlineDate;
-  const deadlineDateStr = `${dl.getFullYear()}-${String(dl.getMonth() + 1).padStart(2, '0')}-${String(dl.getDate()).padStart(2, '0')}`;
+  const finalDueDate = installments.length > 0 ? installments[installments.length - 1].dueDate : null;
+  const deadlineDateStr = finalDueDate || `${deadlineDate.getFullYear()}-${String(deadlineDate.getMonth() + 1).padStart(2, '0')}-${String(deadlineDate.getDate()).padStart(2, '0')}`;
 
   return {
     amount,
@@ -299,24 +385,159 @@ async function calculateFlexibleInstallments(userId, totalAmount, frequency, _un
   };
 }
 
+// Accept either a single txId or a txIds array and return a de-duplicated list of ids
+function normalizeTxIds({ txIds, txId }) {
+  const raw = Array.isArray(txIds) ? txIds : (txId !== undefined && txId !== null ? [txId] : []);
+  const ids = raw.map(v => parseInt(v, 10)).filter(v => !Number.isNaN(v) && v > 0);
+  return [...new Set(ids)];
+}
+
+// Load the requested Dube receipts, scoped to the authenticated customer so a
+// receipt belonging to someone else is never scheduled. Preserves the requested order.
+async function loadOwnedPendingTransactions(req, ids) {
+  const profiles = await db.all(
+    `SELECT id FROM customer_profiles WHERE phone = $1 OR user_id = $2`,
+    [req.user.phone, req.user.id]
+  );
+  if (profiles.length === 0) return [];
+
+  const rows = await db.all(
+    `SELECT id, customer_id, total_amount, due_date
+     FROM credit_transactions
+     WHERE id = ANY($1::int[]) AND customer_id = ANY($2::int[])`,
+    [ids, profiles.map(p => p.id)]
+  );
+
+  const byId = new Map(rows.map(r => [r.id, r]));
+  return ids.map(id => byId.get(id)).filter(Boolean);
+}
+
+function deriveSalaryDay(installments, firstPaymentDate) {
+  if (firstPaymentDate) {
+    const parts = String(firstPaymentDate).split('-');
+    if (parts.length === 3) {
+      const day = parseInt(parts[2], 10);
+      if (!Number.isNaN(day) && day >= 1 && day <= 31) return day;
+    }
+  }
+  const first = installments && installments[0];
+  if (first && first.dueDate) {
+    const day = parseInt(String(first.dueDate).split('-')[2], 10);
+    if (!Number.isNaN(day) && day >= 1 && day <= 31) return day;
+  }
+  return 30;
+}
+
+// Create one independent schedule for a single Dube receipt, anchored to that
+// receipt's own due date. Only supersedes schedules linked to the same receipt,
+// so scheduling several receipts in a row never wipes the previous ones.
+async function applyScheduleForTransaction({ userId, tx, frequency, numInst, firstPaymentDate }) {
+  const { amount, deadlineDateStr, installments } = await calculateFlexibleInstallments(
+    userId,
+    parseFloat(tx.total_amount),
+    frequency,
+    firstPaymentDate,
+    numInst,
+    null,
+    null,
+    tx.id
+  );
+
+  await db.run(
+    `UPDATE customer_schedules SET status = 'SUPERSEDED'
+     WHERE user_id = $1 AND transaction_id = $2 AND status = 'ACTIVE'`,
+    [userId, tx.id]
+  );
+
+  const inserted = await db.get(
+    `INSERT INTO customer_schedules (customer_id, user_id, total_amount, frequency, salary_day, duration_months, installments_json, status, transaction_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE', $8)
+     RETURNING *`,
+    [
+      tx.customer_id,
+      userId,
+      amount,
+      frequency,
+      deriveSalaryDay(installments, firstPaymentDate),
+      numInst,
+      JSON.stringify(installments),
+      tx.id
+    ]
+  );
+
+  await db.run(`UPDATE credit_transactions SET due_date = $1 WHERE id = $2`, [
+    installments[installments.length - 1].dueDate,
+    tx.id
+  ]);
+
+  return {
+    ...inserted,
+    transaction_id: tx.id,
+    deadlineDate: deadlineDateStr,
+    installments
+  };
+}
+
 // Generate Customized Repayment Installment Schedule (Preview)
 async function generateInstallmentSchedule(req, res) {
-  const { totalAmount, frequency, firstPaymentDate, numInstallments, merchantId } = req.body;
+  const { totalAmount, frequency, firstPaymentDate, numInstallments, merchantId, deadlineDate: reqDeadlineDate, txId, txIds } = req.body;
+  const selectedIds = normalizeTxIds({ txIds, txId });
 
   try {
+    const numInst = parseInt(numInstallments || 2);
+
+    // More than one receipt: preview one independent plan per receipt
+    if (selectedIds.length > 1) {
+      const ownedTxs = await loadOwnedPendingTransactions(req, selectedIds);
+      if (ownedTxs.length !== selectedIds.length) {
+        return res.status(400).json({ error: 'One or more selected Dube receipts are unavailable.' });
+      }
+
+      const schedules = [];
+      for (const tx of ownedTxs) {
+        const preview = await calculateFlexibleInstallments(
+          req.user.id,
+          parseFloat(tx.total_amount),
+          frequency,
+          firstPaymentDate,
+          numInst,
+          null,
+          null,
+          tx.id
+        );
+        schedules.push({
+          transactionId: tx.id,
+          totalAmount: preview.amount,
+          deadlineDate: preview.deadlineDateStr,
+          installments: preview.installments
+        });
+      }
+
+      return res.json({
+        frequency,
+        numInstallments: numInst,
+        count: schedules.length,
+        totalAmount: schedules.reduce((sum, s) => sum + s.totalAmount, 0),
+        schedules
+      });
+    }
+
     const { amount, deadlineDateStr, installments } = await calculateFlexibleInstallments(
       req.user.id,
       totalAmount,
       frequency,
       firstPaymentDate,
       numInstallments,
-      merchantId
+      merchantId,
+      reqDeadlineDate,
+      selectedIds[0]
     );
 
     res.json({
       totalAmount: amount,
       frequency,
       deadlineDate: deadlineDateStr,
+      transactionId: selectedIds[0] || null,
       installments
     });
   } catch (err) {
@@ -326,46 +547,102 @@ async function generateInstallmentSchedule(req, res) {
 
 // Save & Apply Active Salary Repayment Schedule
 async function saveCustomerSchedule(req, res) {
-  const { totalAmount, frequency, firstPaymentDate, numInstallments, merchantId } = req.body;
+  const { totalAmount, frequency, firstPaymentDate, numInstallments, merchantId, deadlineDate: reqDeadlineDate, txId, txIds } = req.body;
+  const selectedIds = normalizeTxIds({ txIds, txId });
 
   try {
     const numInst = parseInt(numInstallments || 2);
+
+    // More than one receipt: one independent plan per receipt, each anchored to
+    // that receipt's own due date
+    if (selectedIds.length > 1) {
+      const ownedTxs = await loadOwnedPendingTransactions(req, selectedIds);
+      if (ownedTxs.length !== selectedIds.length) {
+        return res.status(400).json({ error: 'One or more selected Dube receipts are unavailable.' });
+      }
+
+      const schedules = [];
+      for (const tx of ownedTxs) {
+        schedules.push(await applyScheduleForTransaction({
+          userId: req.user.id,
+          tx,
+          frequency,
+          numInst,
+          firstPaymentDate
+        }));
+      }
+
+      return res.status(201).json({
+        message: `Repayment schedule applied to ${schedules.length} Dube receipts.`,
+        schedules
+      });
+    }
+
     const { amount, deadlineDateStr, installments, cpId } = await calculateFlexibleInstallments(
       req.user.id,
       totalAmount,
       frequency,
       firstPaymentDate,
       numInstallments,
-      merchantId
+      merchantId,
+      reqDeadlineDate,
+      selectedIds[0]
     );
 
-    // Deactivate previous active schedule for this specific customer profile or combined schedule
-    if (cpId) {
-      await db.run(`UPDATE customer_schedules SET status = 'SUPERSEDED' WHERE user_id = $1 AND customer_id = $2 AND status = 'ACTIVE'`, [req.user.id, cpId]);
+    // Deactivate the previous active schedule. Transaction-scoped schedules only
+    // supersede other schedules for that same receipt, and a store-level (aggregate)
+    // schedule only supersedes other aggregate schedules — so per-receipt plans the
+    // customer already created are never silently discarded.
+    if (selectedIds[0]) {
+      await db.run(
+        `UPDATE customer_schedules SET status = 'SUPERSEDED' WHERE user_id = $1 AND transaction_id = $2 AND status = 'ACTIVE'`,
+        [req.user.id, selectedIds[0]]
+      );
+    } else if (cpId) {
+      await db.run(
+        `UPDATE customer_schedules SET status = 'SUPERSEDED'
+         WHERE user_id = $1 AND customer_id = $2 AND transaction_id IS NULL AND status = 'ACTIVE'`,
+        [req.user.id, cpId]
+      );
     } else {
-      await db.run(`UPDATE customer_schedules SET status = 'SUPERSEDED' WHERE user_id = $1 AND (customer_id IS NULL OR status = 'ACTIVE')`, [req.user.id]);
+      await db.run(
+        `UPDATE customer_schedules SET status = 'SUPERSEDED'
+         WHERE user_id = $1 AND (customer_id IS NULL OR customer_id NOT IN (SELECT id FROM customer_profiles WHERE user_id = $1)) AND status = 'ACTIVE'`,
+        [req.user.id]
+      );
     }
 
     const result = await db.get(`
-      INSERT INTO customer_schedules (customer_id, user_id, total_amount, frequency, salary_day, duration_months, installments_json, status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE')
+      INSERT INTO customer_schedules (customer_id, user_id, total_amount, frequency, salary_day, duration_months, installments_json, status, transaction_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE', $8)
       RETURNING *
     `, [
       cpId,
       req.user.id,
       amount,
       frequency,
-      parseInt(firstPaymentDate ? firstPaymentDate.split('-')[2] : 30),
+      deriveSalaryDay(installments, firstPaymentDate),
       numInst,
-      JSON.stringify(installments)
+      JSON.stringify(installments),
+      selectedIds[0] || null
     ]);
 
-    // Update pending credit transactions' due_dates to align with the active schedule installment due dates
-    if (cpId && installments.length > 0) {
+    // Update credit transactions' due_dates to align with the active schedule installment due dates
+    if (selectedIds[0] && installments.length > 0) {
+      const finalDueDate = installments[installments.length - 1].dueDate;
+      await db.run(`UPDATE credit_transactions SET due_date = $1 WHERE id = $2`, [finalDueDate, selectedIds[0]]);
+    } else if (cpId && installments.length > 0) {
+      // Skip receipts that already have their own active plan, otherwise this
+      // aggregate schedule would overwrite the deadlines those plans just set.
       const pendingTxs = await db.all(`
-        SELECT id FROM credit_transactions
-        WHERE customer_id = $1 AND status IN ('PENDING', 'PARTIALLY_PAID')
-        ORDER BY created_at ASC
+        SELECT ct.id FROM credit_transactions ct
+        WHERE ct.customer_id = $1
+          AND ct.status IN ('PENDING', 'PARTIALLY_PAID')
+          AND NOT EXISTS (
+            SELECT 1 FROM customer_schedules cs
+            WHERE cs.transaction_id = ct.id AND cs.status = 'ACTIVE'
+          )
+        ORDER BY ct.created_at ASC
       `, [cpId]);
 
       for (let idx = 0; idx < pendingTxs.length; idx++) {
