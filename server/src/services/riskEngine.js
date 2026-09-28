@@ -16,7 +16,7 @@ async function evaluateCreditRisk(customerId, requestedNewAmount = 0) {
     return { allowed: false, reason: 'Customer account is explicitly BLOCKED by merchant due to non-repayment.' };
   }
 
-  // Check for overdue transactions
+  // Check for overdue transactions (informational only - do not restrict transactions)
   const currentDate = new Date().toISOString().split('T')[0];
   const overdueTx = await db.all(`
     SELECT * FROM credit_transactions 
@@ -25,17 +25,9 @@ async function evaluateCreditRisk(customerId, requestedNewAmount = 0) {
     AND due_date < $2
   `, [customerId, currentDate]);
 
-  if (overdueTx.length > 0) {
-    // Auto-update status to RESTRICTED if not already blocked
-    if (customer.status === 'ACTIVE') {
-      await db.run('UPDATE customer_profiles SET status = $1 WHERE id = $2', ['RESTRICTED', customerId]);
-    }
-    return { 
-      allowed: false, 
-      reason: `Credit restricted: Customer has ${overdueTx.length} overdue Dube ledger item(s) past repayment deadline.`,
-      isOverdue: true,
-      overdueCount: overdueTx.length
-    };
+  // Ensure customer profile is not marked RESTRICTED
+  if (customer.status === 'RESTRICTED') {
+    await db.run('UPDATE customer_profiles SET status = $1 WHERE id = $2', ['ACTIVE', customerId]);
   }
 
   // Check credit limit

@@ -66,7 +66,7 @@ async function seedDatabase() {
     const cp2 = await db.get(`
       INSERT INTO customer_profiles (merchant_id, user_id, full_name, phone, fayda_id, photo_url, credit_limit, current_balance, status)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id
-    `, [merchant1.id, customerUser2.id, 'Bethlehem Tadesse', '+251944556677', 'FYD-5544-3322-11', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150', 5000.00, 4800.00, 'RESTRICTED']);
+    `, [merchant1.id, customerUser2.id, 'Bethlehem Tadesse', '+251944556677', 'FYD-5544-3322-11', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150', 5000.00, 4800.00, 'ACTIVE']);
 
     const cp3 = await db.get(`
       INSERT INTO customer_profiles (merchant_id, user_id, full_name, phone, fayda_id, photo_url, credit_limit, current_balance, status)

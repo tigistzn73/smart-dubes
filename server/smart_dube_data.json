@@ -126,7 +126,7 @@
       "photo_url": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
       "credit_limit": 5000,
       "current_balance": 4800,
-      "status": "RESTRICTED",
+      "status": "ACTIVE",
       "created_at": "2026-08-26T18:00:26.932Z"
     }
   ],

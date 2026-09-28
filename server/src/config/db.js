@@ -218,7 +218,7 @@ function seedMemoryStore() {
       photo_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
       credit_limit: 5000.00,
       current_balance: 4800.00,
-      status: 'RESTRICTED',
+      status: 'ACTIVE',
       created_at: new Date().toISOString()
     }
   ];

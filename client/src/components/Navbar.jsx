@@ -26,7 +26,9 @@ import {
   CheckCircle2,
   Building,
   Server,
-  Lock
+  Lock,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 
 export const Navbar = () => {
@@ -36,9 +38,37 @@ export const Navbar = () => {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [unreadAlertsCount, setUnreadAlertsCount] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(!!document.fullscreenElement);
   const menuRef = useRef(null);
 
   const t = (en, am) => (lang === 'EN' ? en : am);
+
+  // Sync fullscreen state
+  useEffect(() => {
+    const handleFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handleFsChange);
+    document.addEventListener('webkitfullscreenchange', handleFsChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFsChange);
+      document.removeEventListener('webkitfullscreenchange', handleFsChange);
+    };
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else if (document.documentElement.webkitRequestFullscreen) {
+        document.documentElement.webkitRequestFullscreen();
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      }
+    }
+  };
 
   // Listen for unread count updates
   useEffect(() => {
@@ -204,6 +234,17 @@ export const Navbar = () => {
             <div className="pt-4 border-t border-slate-800 space-y-2">
               <button
                 onClick={() => {
+                  toggleFullscreen();
+                  setMobileDrawerOpen(false);
+                }}
+                className="w-full p-2.5 rounded-xl bg-slate-800/90 hover:bg-slate-750 text-slate-200 text-xs font-bold flex items-center justify-center gap-2 border border-slate-700/60 transition-all cursor-pointer"
+              >
+                {isFullscreen ? <Minimize2 className="w-4 h-4 text-emerald-400" /> : <Maximize2 className="w-4 h-4 text-sky-400" />}
+                <span>{isFullscreen ? t('Exit Fullscreen', 'ከሙሉ ገጽ ውጣ') : t('Fullscreen Mode', 'ሙሉ ገጽ ሁነታ')}</span>
+              </button>
+
+              <button
+                onClick={() => {
                   setMobileDrawerOpen(false);
                   setSettingsOpen(true);
                 }}
@@ -309,6 +350,22 @@ export const Navbar = () => {
               <span className="hidden sm:inline">Inbox Alerts</span>
             </button>
           )}
+
+          {/* Global Fullscreen Toggle Button */}
+          <button
+            onClick={toggleFullscreen}
+            className="px-2.5 py-1.5 rounded-xl border border-slate-700/60 bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-md text-xs font-bold active:scale-95"
+            title={isFullscreen ? t('Exit Fullscreen', 'ከሙሉ ገጽ ውጣ') : t('Fullscreen', 'ሙሉ ገጽ')}
+          >
+            {isFullscreen ? (
+              <Minimize2 className="w-4 h-4 text-emerald-400" />
+            ) : (
+              <Maximize2 className="w-4 h-4 text-sky-400" />
+            )}
+            <span className="hidden sm:inline">
+              {isFullscreen ? t('Exit Fullscreen', 'ውጣ') : t('Fullscreen', 'ሙሉ ገጽ')}
+            </span>
+          </button>
 
           {/* User Profile Button with Integrated Theme Chooser */}
           {user && (
