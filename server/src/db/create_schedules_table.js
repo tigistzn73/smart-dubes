@@ -12,6 +12,7 @@ async function createSchedulesTable() {
         salary_day INTEGER NOT NULL,
         duration_months INTEGER NOT NULL DEFAULT 2,
         installments_json TEXT NOT NULL,
+        transaction_id INTEGER,
         status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

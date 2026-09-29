@@ -20,8 +20,9 @@ import {
   Clock,
   Store
 } from 'lucide-react';
-export const PaymentModal = ({ isOpen, onClose, transaction, customerId, onPaymentSuccess }) => {
+export const PaymentModal = ({ isOpen, onClose, transaction, customerId, bankAccount, onPaymentSuccess }) => {
   const [gateway, setGateway] = useState('TELEBIRR');
+  const [copiedAccount, setCopiedAccount] = useState(false);
   const [amount, setAmount] = useState(transaction?.total_amount || 0);
   const [refCode, setRefCode] = useState('');
   const [receiptUrl, setReceiptUrl] = useState(null);
@@ -528,6 +529,49 @@ export const PaymentModal = ({ isOpen, onClose, transaction, customerId, onPayme
 
               {gateway === 'RECEIPT_UPLOAD' && (
                 <div className="space-y-3">
+                  {/* Merchant Bank Transfer Details */}
+                  {bankAccount && (
+                    <div className="rounded-xl border border-sky-500/30 bg-sky-500/5 p-3.5 space-y-2.5">
+                      <div className="flex items-center gap-2">
+                        <Landmark className="w-4 h-4 text-sky-400 shrink-0" />
+                        <p className="text-[11px] font-bold text-sky-300 uppercase tracking-wider font-mono">
+                          Step 1 &middot; Transfer to the store's bank account
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div className="bg-slate-900/70 rounded-lg p-2.5">
+                          <p className="text-[9px] uppercase font-mono text-slate-500 font-bold">Bank</p>
+                          <p className="text-xs text-slate-200 font-semibold mt-0.5 break-words">{bankAccount.bank_name}</p>
+                        </div>
+                        <div className="bg-slate-900/70 rounded-lg p-2.5">
+                          <p className="text-[9px] uppercase font-mono text-slate-500 font-bold">Account Holder</p>
+                          <p className="text-xs text-slate-200 font-semibold mt-0.5 break-words">{bankAccount.account_name}</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard?.writeText(bankAccount.account_number);
+                          setCopiedAccount(true);
+                          setTimeout(() => setCopiedAccount(false), 2000);
+                        }}
+                        className="w-full flex items-center justify-between gap-2 bg-slate-900/70 hover:bg-slate-900 rounded-lg p-2.5 transition-colors cursor-pointer"
+                      >
+                        <div className="text-left">
+                          <p className="text-[9px] uppercase font-mono text-slate-500 font-bold">Account Number</p>
+                          <p className="text-sm text-emerald-300 font-bold font-mono mt-0.5 tracking-wider">{bankAccount.account_number}</p>
+                        </div>
+                        {copiedAccount ? (
+                          <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                        ) : (
+                          <Copy className="w-4 h-4 text-slate-400 shrink-0" />
+                        )}
+                      </button>
+                      <p className="text-[10px] text-slate-400 leading-relaxed">
+                        Send exactly <span className="font-bold text-slate-200">{amount.toFixed(2)} ETB</span> using your bank or Telebirr app, then upload the transfer receipt below. The store verifies it before your balance updates.
+                      </p>
+                    </div>
+                  )}
                   {/* Drag & Drop Upload Area */}
                   <div
                     onDragEnter={handleDrag}

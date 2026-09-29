@@ -5,6 +5,7 @@ const {
   getMerchantCustomers,
   registerCustomerProfile,
   updateCustomerProfile,
+  updateMerchantBankAccount,
   createCreditTransaction,
   getMerchantTransactions,
   triggerSMSReminder,
@@ -33,7 +34,26 @@ router.post(
   registerCustomerProfile
 );
 
-router.put('/customers/:customerId', updateCustomerProfile);
+router.put(
+  '/customers/:customerId',
+  [
+    body('creditLimit').optional({ values: 'falsy' }).isFloat({ min: 0 }).withMessage('Credit limit must be a number of 0 or more'),
+    body('status').optional().isIn(['ACTIVE', 'RESTRICTED', 'BLOCKED']).withMessage('Status must be ACTIVE, RESTRICTED or BLOCKED'),
+    validateResult
+  ],
+  updateCustomerProfile
+);
+
+router.put(
+  '/bank-account',
+  [
+    body('bankName').optional().isLength({ max: 100 }).withMessage('Bank name is too long'),
+    body('accountName').optional().isLength({ max: 200 }).withMessage('Account name is too long'),
+    body('accountNumber').optional().isLength({ max: 50 }).withMessage('Account number is too long'),
+    validateResult
+  ],
+  updateMerchantBankAccount
+);
 
 router.post(
   '/transactions',

@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: smart-dubes
+    runtime: node
+    plan: free
+    region: oregon
+    branch: main
+    autoDeploy: true
+    buildCommand: npm install --prefix client && npm run build --prefix client && npm install --prefix server
+    startCommand: npm start --prefix server
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      # Persistence: point this at a free hosted Postgres (Neon / Supabase / Aiven).
+      # Without it the app falls back to an on-disk JSON file that Render wipes
+      # on every deploy, so all SMS history and ledger data is lost.
+      - key: DATABASE_URL
+        sync: false
+      # Africa's Talking SMS. Optional — without it SMS runs in simulation mode.
+      - key: AT_USERNAME
+        sync: false
+      - key: AT_API_KEY
+        sync: false
+      - key: AT_SENDER_ID
+        sync: false
+      - key: AT_ENV
+        value: live

@@ -69,6 +69,8 @@ export const CustomerPortal = () => {
   const [scheduleResult, setScheduleResult] = useState(null);
   const [selectedScheduleMerchant, setSelectedScheduleMerchant] = useState('ALL');
   const [selectedMerchantFilter, setSelectedMerchantFilter] = useState('ALL');
+  const [selectedScheduleTx, setSelectedScheduleTx] = useState(null); // receipt that opened the builder
+  const [selectedTxIds, setSelectedTxIds] = useState([]); // multi-select for bulk scheduling
 
   // Alerts Popover Modal State
   const [alertsOpen, setAlertsOpen] = useState(false);
@@ -113,9 +115,21 @@ export const CustomerPortal = () => {
   const [applyingSchedule, setApplyingSchedule] = useState(false);
 
   const handleGenerateSchedule = async () => {
+    // Fall back to the store/overall balance only when no specific receipt is targeted
+    const targetIds = scheduleTargetTxIds;
+    const targetTxs = targetIds.length > 0
+      ? transactions.filter(tx => targetIds.some(id => Number(id) === Number(tx.id)))
+      : [];
+    const singleTargetTx = targetTxs.length === 1 ? targetTxs[0] : null;
+
     let targetBalance = data?.summary?.totalBalance || 0;
-    const merchantIdForSchedule = selectedScheduleMerchant !== 'ALL' ? Number(selectedScheduleMerchant) : null;
-    if (selectedScheduleMerchant !== 'ALL') {
+    let merchantIdForSchedule = selectedScheduleMerchant !== 'ALL' ? Number(selectedScheduleMerchant) : null;
+    if (targetTxs.length > 0) {
+      targetBalance = targetTxs.reduce((sum, tx) => sum + (Number(tx.total_amount) || 0), 0);
+      if (targetTxs.every(tx => String(tx.merchant_id) === String(targetTxs[0].merchant_id))) {
+        merchantIdForSchedule = targetTxs[0].merchant_id;
+      }
+    } else if (selectedScheduleMerchant !== 'ALL') {
       const p = profiles.find(pr => String(pr.merchant_id) === String(selectedScheduleMerchant));
       if (p) targetBalance = p.current_balance;
     }
@@ -131,7 +145,9 @@ export const CustomerPortal = () => {
           totalAmount: targetBalance,
           frequency,
           numInstallments,
-          merchantId: merchantIdForSchedule
+          merchantId: merchantIdForSchedule,
+          ...(singleTargetTx ? { txId: singleTargetTx.id } : {}),
+          ...(targetIds.length > 1 ? { txIds: targetIds } : {})
         })
       });
       const sData = await res.json();
@@ -142,9 +158,20 @@ export const CustomerPortal = () => {
   };
 
   const handleApplySchedule = async () => {
+    const targetIds = scheduleTargetTxIds;
+    const targetTxs = targetIds.length > 0
+      ? transactions.filter(tx => targetIds.some(id => Number(id) === Number(tx.id)))
+      : [];
+    const singleTargetTx = targetTxs.length === 1 ? targetTxs[0] : null;
+
     let targetBalance = data?.summary?.totalBalance || 0;
-    const merchantIdForSchedule = selectedScheduleMerchant !== 'ALL' ? Number(selectedScheduleMerchant) : null;
-    if (selectedScheduleMerchant !== 'ALL') {
+    let merchantIdForSchedule = selectedScheduleMerchant !== 'ALL' ? Number(selectedScheduleMerchant) : null;
+    if (targetTxs.length > 0) {
+      targetBalance = targetTxs.reduce((sum, tx) => sum + (Number(tx.total_amount) || 0), 0);
+      if (targetTxs.every(tx => String(tx.merchant_id) === String(targetTxs[0].merchant_id))) {
+        merchantIdForSchedule = targetTxs[0].merchant_id;
+      }
+    } else if (selectedScheduleMerchant !== 'ALL') {
       const p = profiles.find(pr => String(pr.merchant_id) === String(selectedScheduleMerchant));
       if (p) targetBalance = p.current_balance;
     }
@@ -161,7 +188,9 @@ export const CustomerPortal = () => {
           totalAmount: targetBalance,
           frequency,
           numInstallments,
-          merchantId: merchantIdForSchedule
+          merchantId: merchantIdForSchedule,
+          ...(singleTargetTx ? { txId: singleTargetTx.id } : {}),
+          ...(targetIds.length > 1 ? { txIds: targetIds } : {})
         })
       });
       const sData = await res.json();
@@ -169,6 +198,7 @@ export const CustomerPortal = () => {
       alert('✓ Flexible Repayment Schedule applied successfully!');
       setScheduleModalOpen(false);
       setScheduleResult(null);
+      setSelectedTxIds([]);
       fetchCustomerDashboard();
     } catch (err) {
       alert(err.message);
@@ -177,22 +207,53 @@ export const CustomerPortal = () => {
     }
   };
 
-  const openScheduleModal = (merchantId) => {
-    if (merchantId) {
-      setSelectedScheduleMerchant(String(merchantId));
+  const toggleTxSelection = (id) => {
+    setSelectedTxIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
+  };
+
+  const toggleSelectAllVisible = () => {
+    const visibleIds = filteredPendingTransactions.map(tx => tx.id);
+    const allSelected = visibleIds.length > 0 && visibleIds.every(id => selectedTxIds.includes(id));
+    setSelectedTxIds(prev => (allSelected
+      ? prev.filter(id => !visibleIds.includes(id))
+      : [...new Set([...prev, ...visibleIds])]));
+  };
+
+  // Callers pass either a merchant id (the hub's "Choose Schedule" button) or a
+  // pending receipt (its per-row button), so normalise both shapes here
+  const openScheduleModal = (target = null) => {
+    if (target && typeof target === 'object') {
+      setSelectedScheduleTx(target);
+    } else {
+      setSelectedScheduleTx(null);
+      if (target) setSelectedScheduleMerchant(String(target));
     }
+    setFrequency('WEEKLY');
+    setNumInstallments(2);
+    setScheduleResult(null);
+    // The builder targets selectedScheduleTx (a row) or the store aggregate, so
+    // any leftover checkbox selection is irrelevant here
+    setSelectedTxIds([]);
+    setScheduleModalOpen(true);
+  };
+
+  // Open the builder for every currently checked pending receipt
+  const openBulkScheduleModal = () => {
+    if (selectedTxIds.length === 0) return;
+    setSelectedScheduleTx(null);
+    setSelectedScheduleMerchant('ALL');
     setFrequency('WEEKLY');
     setNumInstallments(2);
     setScheduleResult(null);
     setScheduleModalOpen(true);
   };
 
-  // Automatically calculate schedule preview when builder modal is open or options change
+  // The breakdown is generated on demand from the "Calculate Schedule" button, so
+  // clear any previous preview whenever the plan options change. Otherwise a stale
+  // breakdown could be applied while the form shows different options.
   useEffect(() => {
-    if (scheduleModalOpen) {
-      handleGenerateSchedule();
-    }
-  }, [scheduleModalOpen, frequency, numInstallments, selectedScheduleMerchant]);
+    if (scheduleModalOpen) setScheduleResult(null);
+  }, [frequency, numInstallments, selectedScheduleMerchant, selectedScheduleTx, selectedTxIds]);
 
   const notifications = data?.notifications || [];
   const visibleNotifications = notifications.filter(n => !dismissedAlertIds.includes(n.id));
@@ -234,6 +295,22 @@ export const CustomerPortal = () => {
   const pendingTransactions = transactions.filter(tx => tx.status !== 'SETTLED');
   const repayments = data?.repayments || [];
   const profiles = data?.profiles || [];
+
+  // Receipts still awaiting payment, and the subset the current store filter shows
+  const filteredPendingTransactions = (() => {
+    if (selectedMerchantFilter === 'ALL') return pendingTransactions;
+    const selectedProf = profiles.find(p => String(p.merchant_id) === String(selectedMerchantFilter));
+    return pendingTransactions.filter(tx =>
+      (tx.merchant_id && String(tx.merchant_id) === String(selectedMerchantFilter)) ||
+      (selectedProf && tx.customer_id === selectedProf.id) ||
+      (selectedProf && tx.store_name === selectedProf.store_name)
+    );
+  })();
+
+  // What the builder is scoped to: the checked receipts, the clicked receipt, or the store
+  const scheduleTargetTxIds = selectedTxIds.length > 0
+    ? selectedTxIds
+    : (selectedScheduleTx ? [selectedScheduleTx.id] : []);
 
   const chartWidth = 500;
   const chartHeight = 150;
@@ -768,44 +845,60 @@ export const CustomerPortal = () => {
                   const activeProfile = profiles.find(p => String(p.merchant_id) === String(selectedMerchantFilter)) || profiles[0];
                   if (!activeProfile) return null;
 
-                  const matchingSchedule = allActiveSchedules.find(s =>
+                  // A store can hold several concurrent plans (one per receipt) after
+                  // multi-select scheduling, so render every plan that still owes money.
+                  const storeSchedules = allActiveSchedules.filter(s =>
                     (s.merchant_id && String(s.merchant_id) === String(activeProfile.merchant_id)) ||
                     (s.customer_id && s.customer_id === activeProfile.id) ||
                     (s.store_name && activeProfile.store_name && s.store_name.toLowerCase() === activeProfile.store_name.toLowerCase())
                   );
-
-                  const hasUnpaidInsts = matchingSchedule && matchingSchedule.installments?.some(i => i.status !== 'PAID');
+                  const activePlans = storeSchedules.filter(s => s.installments?.some(i => i.status !== 'PAID'));
 
                   // CASE 1: ALREADY SCHEDULED -> "THEN SCHEDULED THEN VIEW THE SCHEDULE THEN PAY"
-                  if (matchingSchedule && hasUnpaidInsts) {
-                    const paidCount = matchingSchedule.installments.filter(i => i.status === 'PAID').length;
-                    const totalCount = matchingSchedule.installments.length;
-                    const nextUnpaidInst = matchingSchedule.installments.find(i => i.status !== 'PAID');
-
+                  if (activePlans.length > 0) {
                     return (
-                      <div className="p-4 sm:p-5 rounded-xl bg-gradient-to-br from-slate-900 via-slate-900 to-sky-950/40 border border-sky-500/30 space-y-4 shadow-lg">
+                      <div className="space-y-4">
+                        {activePlans.map(matchingSchedule => {
+                          const paidCount = matchingSchedule.installments.filter(i => i.status === 'PAID').length;
+                          const totalCount = matchingSchedule.installments.length;
+                          const nextUnpaidInst = matchingSchedule.installments.find(i => i.status !== 'PAID');
+                          // The receipt this plan belongs to (null for legacy store-wide plans)
+                          const linkedTx = matchingSchedule.transaction_id
+                            ? transactions.find(t => Number(t.id) === Number(matchingSchedule.transaction_id))
+                            : null;
+                          const planTxForPayment = linkedTx
+                            || pendingTransactions.find(t => (activeProfile && t.customer_id === activeProfile.id) || (activeProfile && t.merchant_id === activeProfile.merchant_id))
+                            || pendingTransactions[0];
+
+                          return (
+                      <div key={matchingSchedule.id || matchingSchedule.transaction_id || 'plan'} className="p-4 sm:p-5 rounded-xl bg-white border border-slate-200 space-y-4 shadow-sm">
                         {/* Header */}
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-800/80">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200">
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-sky-400 font-mono tracking-wide uppercase">
+                              <span className="text-xs font-bold text-sky-700 font-mono tracking-wide uppercase">
                                 {t('Active Repayment Schedule', 'ገባሪ የክፍያ የጊዜ ሰሌዳ')}
                               </span>
-                              <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                              <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-sky-100 text-sky-700 border border-sky-200">
                                 {matchingSchedule.frequency || 'WEEKLY'}
                               </span>
                             </div>
-                            <h5 className="text-sm font-extrabold text-slate-100 mt-0.5 flex items-center gap-1.5">
-                              <Store className="w-4 h-4 text-emerald-400" />
+                            <h5 className="text-sm font-extrabold text-slate-800 mt-0.5 flex items-center gap-1.5">
+                              <Store className="w-4 h-4 text-emerald-600" />
                               <span>{activeProfile.store_name}</span>
+                              {linkedTx && (
+                                <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold font-mono bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                  {linkedTx.transaction_ref}
+                                </span>
+                              )}
                             </h5>
                           </div>
 
                           <div className="text-left sm:text-right">
-                            <span className="text-[10px] text-slate-400 font-mono">
-                              {t('Progress:', 'ሂደት፦')} <span className="text-emerald-400 font-bold">{paidCount} / {totalCount}</span> {t('Paid', 'ተከፍሏል')}
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              {t('Progress:', 'ሂደት፦')} <span className="text-emerald-600 font-bold">{paidCount} / {totalCount}</span> {t('Paid', 'ተከፍሏል')}
                             </span>
-                            <div className="w-36 h-2 bg-slate-800 rounded-full mt-1 overflow-hidden border border-slate-700/60">
+                            <div className="w-36 h-2 bg-slate-200 rounded-full mt-1 overflow-hidden border border-slate-300">
                               <div
                                 className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-500"
                                 style={{ width: `${(paidCount / totalCount) * 100}%` }}
@@ -816,7 +909,7 @@ export const CustomerPortal = () => {
 
                         {/* Installments Breakdown */}
                         <div className="space-y-2">
-                          <div className="flex justify-between items-center text-[11px] font-bold text-slate-400 font-mono px-1">
+                          <div className="flex justify-between items-center text-[11px] font-bold text-slate-500 font-mono px-1">
                             <span>{t('Installment Details', 'የክፍልፋይ ዝርዝር')}</span>
                             <span>{t('Status / Action', 'ሁኔታ / ተግባር')}</span>
                           </div>
@@ -831,29 +924,29 @@ export const CustomerPortal = () => {
                                   key={inst.installmentNo}
                                   className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all ${
                                     isPaid
-                                      ? 'bg-slate-950/40 border-slate-800/60 opacity-80'
+                                      ? 'bg-slate-100 border-slate-200'
                                       : isNextToPay
-                                      ? 'bg-slate-900 border-emerald-500/40 ring-1 ring-emerald-500/20 shadow-md'
-                                      : 'bg-slate-950/70 border-slate-800'
+                                      ? 'bg-emerald-50 border-emerald-400 ring-1 ring-emerald-200 shadow-sm'
+                                      : 'bg-white border-slate-200'
                                   }`}
                                 >
                                   <div className="flex items-center gap-3 font-mono">
                                     <span className={`w-7 h-7 rounded-lg text-xs font-bold flex items-center justify-center shrink-0 ${
-                                      isPaid ? 'bg-emerald-500/20 text-emerald-400' : 'bg-sky-500/20 text-sky-400'
+                                      isPaid ? 'bg-emerald-100 text-emerald-700' : 'bg-sky-100 text-sky-700'
                                     }`}>
                                       #{inst.installmentNo}
                                     </span>
                                     <div>
                                       <div className="flex items-center gap-2">
-                                        <span className="text-xs font-bold text-slate-200">
+                                        <span className="text-xs font-bold text-slate-800">
                                           {t('Installment', 'ክፍል')} #{inst.installmentNo}
                                         </span>
-                                        <span className="text-slate-500">•</span>
-                                        <span className="text-[11px] text-slate-400">
-                                          {t('Due Date:', 'ቀን፦')} <strong className="text-slate-300">{inst.dueDate}</strong>
+                                        <span className="text-slate-400">•</span>
+                                        <span className="text-[11px] text-slate-500">
+                                          {t('Due Date:', 'ቀን፦')} <strong className="text-slate-700">{inst.dueDate}</strong>
                                         </span>
                                       </div>
-                                      <p className="text-xs font-extrabold text-amber-400 mt-0.5">
+                                      <p className="text-xs font-extrabold text-amber-600 mt-0.5">
                                         {inst.amount.toFixed(2)} ETB
                                       </p>
                                     </div>
@@ -861,14 +954,14 @@ export const CustomerPortal = () => {
 
                                   <div className="flex items-center gap-2 self-end sm:self-auto">
                                     {isPaid ? (
-                                      <span className="px-3 py-1.5 rounded-lg text-xs bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30 flex items-center gap-1 font-mono">
+                                      <span className="px-3 py-1.5 rounded-lg text-xs bg-emerald-100 text-emerald-700 font-bold border border-emerald-200 flex items-center gap-1 font-mono">
                                         <CheckCircle2 className="w-3.5 h-3.5" />
                                         <span>{t('PAID', 'ተከፍሏል')}</span>
                                       </span>
                                     ) : (
                                       <button
                                         onClick={() => {
-                                          const targetTx = pendingTransactions.find(t => (activeProfile && t.customer_id === activeProfile.id) || (activeProfile && t.merchant_id === activeProfile.merchant_id)) || pendingTransactions[0];
+                                          const targetTx = planTxForPayment;
                                           if (targetTx) {
                                             setSelectedTxForPayment({
                                               ...targetTx,
@@ -894,22 +987,23 @@ export const CustomerPortal = () => {
                         </div>
 
                         {/* Schedule Footer Actions */}
-                        <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
+                        <div className="pt-2 border-t border-slate-200 flex flex-wrap items-center justify-center gap-3">
                           <button
                             onClick={() => {
                               setSelectedScheduleMerchant(String(activeProfile.merchant_id || ''));
-                              openScheduleModal(activeProfile.merchant_id);
+                              setSelectedTxIds([]);
+                              openScheduleModal(linkedTx || activeProfile.merchant_id);
                             }}
-                            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
+                            className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer border border-slate-200"
                           >
-                            <Clock className="w-3.5 h-3.5 text-sky-400" />
+                            <Clock className="w-3.5 h-3.5 text-sky-600" />
                             <span>{t('Modify / Recalculate Schedule', 'የጊዜ ሰሌዳውን ቀይር / አስተካክል')}</span>
                           </button>
 
                           {activeProfile.current_balance > 0 && (
                             <button
                               onClick={() => {
-                                const targetTx = pendingTransactions.find(t => (activeProfile && t.customer_id === activeProfile.id) || (activeProfile && t.merchant_id === activeProfile.merchant_id)) || pendingTransactions[0];
+                                const targetTx = planTxForPayment;
                                 if (targetTx) {
                                   setSelectedTxForPayment({
                                     ...targetTx,
@@ -920,13 +1014,16 @@ export const CustomerPortal = () => {
                                   });
                                 }
                               }}
-                              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
+                              className="px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer border border-amber-200"
                             >
                               <CreditCard className="w-3.5 h-3.5" />
                               <span>{t('Pay Remaining Debt at Once', 'ቀሪውን ሙሉ እዳ በአንድ ጊዜ ክፈል')} ({activeProfile.current_balance.toFixed(2)} ETB)</span>
                             </button>
                           )}
                         </div>
+                      </div>
+                          );
+                        })}
                       </div>
                     );
                   }
@@ -977,6 +1074,42 @@ export const CustomerPortal = () => {
                       )}
                     </div>
 
+                    {/* Bulk scheduling toolbar */}
+                    {displayedPendingTransactions.length > 0 && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-900/70 border border-slate-800">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={toggleSelectAllVisible}
+                            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-bold transition-colors cursor-pointer"
+                          >
+                            {selectedTxIds.length > 0
+                              && filteredPendingTransactions.every(tx => selectedTxIds.includes(tx.id))
+                              ? t('Clear all', 'ሁሉንም አጽዳ')
+                              : t('Select all', 'ሁሉንም ምረጥ')}
+                          </button>
+                          <span className="text-[11px] text-slate-400 font-mono">
+                            {t('Selected:', 'የተመረጡ:')} {selectedTxIds.length} / {filteredPendingTransactions.length}
+                          </span>
+                          {selectedTxIds.length > 0 && (
+                            <span className="text-[11px] text-amber-400 font-mono">
+                              {filteredPendingTransactions
+                                .filter(tx => selectedTxIds.includes(tx.id))
+                                .reduce((sum, tx) => sum + (Number(tx.total_amount) || 0), 0)
+                                .toFixed(2)} ETB
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={openBulkScheduleModal}
+                          disabled={selectedTxIds.length === 0}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Calendar className="w-3.5 h-3.5" />
+                          {t('Schedule Selected', 'የተመረጡን አስቀመጥ')}
+                        </button>
+                      </div>
+                    )}
+
                     {displayedPendingTransactions.length === 0 ? (
                       <div className="text-center py-8 text-slate-500 text-xs">
                         {t('No pending credit ledger items found.', 'ምንም ያልተከፈለ የዱቤ ቀሪ ሂሳብ አልተገኘም።')}
@@ -985,20 +1118,35 @@ export const CustomerPortal = () => {
                       <div className="space-y-3">
                         {displayedPendingTransactions.map(tx => {
                           const allActiveSchedules = data?.activeSchedules || (data?.activeSchedule ? [data.activeSchedule] : []);
-                          const matchingSchedule = allActiveSchedules.find(s =>
+                          // Prefer the plan tied to THIS receipt, so concurrent plans
+                          // for other receipts at the same store are not confused
+                          const linkedSchedule = allActiveSchedules.find(s =>
+                            s.transaction_id && Number(s.transaction_id) === Number(tx.id)
+                          );
+                          const matchingSchedule = linkedSchedule || allActiveSchedules.find(s =>
                             (tx.merchant_id && String(s.merchant_id) === String(tx.merchant_id)) ||
                             (tx.customer_id && s.customer_id === tx.customer_id) ||
                             (tx.store_name && s.store_name && s.store_name.toLowerCase() === tx.store_name.toLowerCase())
                           );
                           const isScheduled = matchingSchedule && matchingSchedule.installments?.some(i => i.status !== 'PAID');
                           const nextInst = isScheduled ? matchingSchedule.installments.find(i => i.status !== 'PAID') : null;
+                          const isSelected = selectedTxIds.includes(tx.id);
 
                           return (
                             <div
                               key={tx.id}
-                              className="bg-slate-900/70 p-4 rounded-xl border border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
+                              className={`bg-slate-900/70 p-4 rounded-xl border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-colors ${
+                                isSelected ? 'border-emerald-500/50 bg-slate-900' : 'border-slate-800'
+                              }`}
                             >
-                              <div className="space-y-1">
+                              <div className="flex items-start gap-3 flex-1 min-w-0">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => toggleTxSelection(tx.id)}
+                                  className="mt-1 w-4 h-4 shrink-0 accent-emerald-500 cursor-pointer"
+                                />
+                                <div className="space-y-1 min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="font-mono text-xs font-bold text-emerald-400">{tx.transaction_ref}</span>
                                   <span className="text-slate-400 text-xs">•</span>
@@ -1014,11 +1162,6 @@ export const CustomerPortal = () => {
                                   >
                                     {tx.status === 'SETTLED' ? t('SETTLED', 'የተከፈለ') : tx.status === 'OVERDUE' ? t('OVERDUE', 'ቀን ያለፈበት') : t('PENDING', 'ያልተከፈለ')}
                                   </span>
-                                  {isScheduled && (
-                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-sky-500/20 text-sky-400 border border-sky-500/30">
-                                      {t('Scheduled Plan Active', 'የጊዜ ሰሌዳ ተይዞለታል')}
-                                    </span>
-                                  )}
                                 </div>
 
                                 {/* Line items preview */}
@@ -1028,6 +1171,7 @@ export const CustomerPortal = () => {
                                       {item.quantity}x {item.name} ({item.total ? item.total.toFixed(2) : ''} ETB)
                                     </span>
                                   ))}
+                                </div>
                                 </div>
                               </div>
 
@@ -1042,33 +1186,34 @@ export const CustomerPortal = () => {
                                 </div>
 
                                 {tx.status !== 'SETTLED' && (
-                                  nextInst ? (
+                                  <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                                    {/* Schedule Button side by side with the Pay button */}
                                     <button
-                                      onClick={() => setSelectedTxForPayment({
-                                        ...tx,
-                                        total_amount: nextInst.amount,
-                                        installmentNo: nextInst.installmentNo
-                                      })}
-                                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 whitespace-nowrap"
+                                      onClick={() => {
+                                        setSelectedScheduleMerchant(String(tx.merchant_id || ''));
+                                        setSelectedTxIds([]);
+                                        openScheduleModal(tx);
+                                      }}
+                                      className="px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold shadow-md shadow-sky-600/20 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 whitespace-nowrap"
                                     >
-                                      <CreditCard className="w-3.5 h-3.5" />
-                                      <span>{t('Pay Inst', 'ክፍልፋይ ክፈል')} #{nextInst.installmentNo}</span>
+                                      <Calendar className="w-3.5 h-3.5" />
+                                      <span>{t('Choose Schedule', 'የጊዜ ሰሌዳ ምረጥ')}</span>
                                     </button>
-                                  ) : (
-                                    <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                                      {/* Schedule Button side by side with Pay Dube Button */}
-                                      <button
-                                        onClick={() => {
-                                          setSelectedScheduleMerchant(String(tx.merchant_id || ''));
-                                          openScheduleModal(tx.merchant_id);
-                                        }}
-                                        className="px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold shadow-md shadow-sky-600/20 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 whitespace-nowrap"
-                                      >
-                                        <Calendar className="w-3.5 h-3.5" />
-                                        <span>{t('Choose Schedule', 'የጊዜ ሰሌዳ ምረጥ')}</span>
-                                      </button>
 
-                                      {/* Pay Dube Button */}
+                                    {/* Pay current installment when a plan is active, otherwise the full debt */}
+                                    {nextInst ? (
+                                      <button
+                                        onClick={() => setSelectedTxForPayment({
+                                          ...tx,
+                                          total_amount: nextInst.amount,
+                                          installmentNo: nextInst.installmentNo
+                                        })}
+                                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 whitespace-nowrap"
+                                      >
+                                        <CreditCard className="w-3.5 h-3.5" />
+                                        <span>{t('Pay Inst', 'ክፍልፋይ ክፈል')} #{nextInst.installmentNo}</span>
+                                      </button>
+                                    ) : (
                                       <button
                                         onClick={() => setSelectedTxForPayment(tx)}
                                         className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 whitespace-nowrap"
@@ -1076,8 +1221,8 @@ export const CustomerPortal = () => {
                                         <CreditCard className="w-3.5 h-3.5" />
                                         <span>{t('Pay Debt', 'ዕዳ ክፈል')}</span>
                                       </button>
-                                    </div>
-                                  )
+                                    )}
+                                  </div>
                                 )}
                               </div>
                             </div>
@@ -1158,6 +1303,17 @@ export const CustomerPortal = () => {
           onClose={() => setSelectedTxForPayment(null)}
           transaction={selectedTxForPayment}
           customerId={selectedTxForPayment.customer_id}
+          bankAccount={(() => {
+            const p = profiles.find(pr => String(pr.merchant_id) === String(selectedTxForPayment.merchant_id))
+              || profiles.find(pr => String(pr.id) === String(selectedTxForPayment.customer_id));
+            if (!p || !p.bank_name || !p.account_name || !p.account_number) return null;
+            return {
+              bank_name: p.bank_name,
+              account_name: p.account_name,
+              account_number: p.account_number,
+              store_name: p.store_name
+            };
+          })()}
           onPaymentSuccess={() => {
             fetchCustomerDashboard();
           }}
@@ -1225,15 +1381,42 @@ export const CustomerPortal = () => {
 
               {/* 1. Current Dube Balance */}
               {(() => {
+                // Mirror exactly what handleGenerateSchedule/handleApplySchedule post to
+                // the server, so the balance and deadline shown here are the ones the
+                // schedule is actually built from: the checked receipt(s) first, else the
+                // clicked receipt, else the store aggregate.
+                const targetTxs = scheduleTargetTxIds.length > 0
+                  ? transactions.filter(tx => scheduleTargetTxIds.some(id => Number(id) === Number(tx.id)))
+                  : [];
+                const earliestByDue = list => list.slice().sort((a, b) => {
+                  const av = a?.due_date ? String(a.due_date).split('T')[0] : null;
+                  const bv = b?.due_date ? String(b.due_date).split('T')[0] : null;
+                  if (av === bv) return 0;
+                  if (!av) return 1;
+                  if (!bv) return -1;
+                  return av < bv ? -1 : 1;
+                })[0];
+
                 let displayBalance = summary.totalBalance;
                 let storeLabel = `Total across all ${summary.activeAccountsCount || 1} stores`;
-                let selectedTx = transactions[0];
-                if (selectedScheduleMerchant !== 'ALL') {
+                let deadlineTx = earliestByDue(transactions);
+
+                if (targetTxs.length === 1) {
+                  displayBalance = Number(targetTxs[0].total_amount) || 0;
+                  storeLabel = targetTxs[0].store_name;
+                  deadlineTx = targetTxs[0];
+                } else if (targetTxs.length > 1) {
+                  displayBalance = targetTxs.reduce((sum, tx) => sum + (Number(tx.total_amount) || 0), 0);
+                  storeLabel = `${targetTxs.length} ${t('Dube receipts', 'ደረሰኞች')}`;
+                  deadlineTx = earliestByDue(targetTxs);
+                } else if (selectedScheduleMerchant !== 'ALL') {
                   const selectedP = profiles.find(pr => String(pr.merchant_id) === String(selectedScheduleMerchant));
                   if (selectedP) {
                     displayBalance = selectedP.current_balance;
                     storeLabel = selectedP.store_name;
-                    selectedTx = transactions.find(t => t.merchant_id === selectedP.merchant_id) || transactions[0];
+                    deadlineTx = earliestByDue(
+                      transactions.filter(tx => String(tx.merchant_id) === String(selectedP.merchant_id))
+                    ) || deadlineTx;
                   }
                 }
                 return (
@@ -1252,7 +1435,7 @@ export const CustomerPortal = () => {
                     <div>
                       <label className="block text-xs font-bold text-slate-300 mb-1">{t('Current Dube Repayment Deadline:', 'የዱቤ መክፈያ የጊዜ ገደብ፦')}</label>
                       <div className="bg-slate-900 px-3 py-2.5 rounded-xl border border-slate-800 text-sm font-extrabold text-emerald-400 font-mono">
-                        {selectedTx?.due_date ? String(selectedTx.due_date).split('T')[0] : 'N/A'}
+                        {deadlineTx?.due_date ? String(deadlineTx.due_date).split('T')[0] : 'N/A'}
                       </div>
                     </div>
                   </>
@@ -1277,23 +1460,6 @@ export const CustomerPortal = () => {
               {/* 3. Number of Installments */}
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1.5">{t('Number of Installments:', 'የክፍሎች ብዛት፦')}</label>
-                {/* Quick Selection Buttons */}
-                <div className="grid grid-cols-4 gap-2 mb-2">
-                  {[2, 3, 4, 6].map(n => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => setNumInstallments(n)}
-                      className={`py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer active:scale-95 ${
-                        numInstallments === n
-                          ? 'bg-sky-600 text-white border-sky-400 shadow-md shadow-sky-600/30 ring-1 ring-sky-400'
-                          : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-600 hover:bg-slate-850'
-                      }`}
-                    >
-                      {n} {t('Parts', 'ክፍል')}
-                    </button>
-                  ))}
-                </div>
                 <select
                   value={numInstallments}
                   onChange={e => {
@@ -1321,6 +1487,24 @@ export const CustomerPortal = () => {
               {/* 7. Show Installment Breakdown */}
               {scheduleResult && (
                 <div className="space-y-3 pt-2">
+                  {/* When several receipts are scheduled at once, show what each one gets */}
+                  {Array.isArray(scheduleResult.results) && scheduleResult.results.length > 1 && (
+                    <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-2 max-h-48 overflow-y-auto">
+                      <h4 className="text-xs font-bold text-sky-400">
+                        {t('Per-receipt split:', 'በየደረሰኝ ክፍፍል፦')}
+                      </h4>
+                      {scheduleResult.results.map(r => (
+                        <div key={r.transactionId} className="flex justify-between items-center text-[11px] font-mono py-1 px-2 bg-slate-950/60 rounded-lg border border-slate-800/80">
+                          <span className="text-slate-300 truncate">
+                            {r.transactionRef} {r.storeName ? `— ${r.storeName}` : ''}
+                          </span>
+                          <span className="text-amber-400 font-bold shrink-0 ml-2">
+                            {r.installments.length}× · {Number(r.totalAmount || 0).toFixed(2)} ETB
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-2.5 max-h-60 overflow-y-auto">
                     <div className="flex justify-between items-center pb-2 border-b border-slate-800">
                       <h4 className="text-xs font-bold text-emerald-400">{t('Installment Breakdown:', 'የክፍያ ክፍፍል ዝርዝር፦')}</h4>

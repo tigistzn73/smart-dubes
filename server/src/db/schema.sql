@@ -33,6 +33,9 @@ CREATE TABLE merchants (
     kyc_status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (kyc_status IN ('PENDING', 'VERIFIED', 'REJECTED')),
     verified_at TIMESTAMPTZ,
     kyc_notes TEXT,
+    bank_name VARCHAR(100),
+    account_name VARCHAR(200),
+    account_number VARCHAR(50),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

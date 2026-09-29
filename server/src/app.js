@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
 const path = require('path');
 const authRoutes = require('./routes/authRoutes');
 const merchantRoutes = require('./routes/merchantRoutes');
@@ -16,6 +17,17 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 // Auto-seed demo database if empty (async check)
 const db = require('./config/database');
 async function initDb() {
+  // A real PostgreSQL pool is required for data to survive a restart.
+  // Without it the app falls back to an on-disk JSON file, which is wiped
+  // on every deploy/spin-down on ephemeral hosts (Render free tier).
+  if (!db.pool) {
+    console.warn(
+      '[DB] WARNING: no DATABASE_URL / PG_HOST configured. Falling back to the\n' +
+      '[DB] embedded JSON store. ALL DATA (including SMS history) WILL BE LOST\n' +
+      '[DB] on every deploy or restart. Set DATABASE_URL to a persistent database.'
+    );
+  }
+
   try {
     const row = await db.get('SELECT COUNT(*) as count FROM users');
     if (!row || parseInt(row.count) === 0) {
@@ -45,10 +57,18 @@ initDb();
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
+  const persistent = Boolean(db.pool);
   res.json({
     status: 'HEALTHY',
     service: 'Smart Dube REST API',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    storage: {
+      driver: persistent ? 'POSTGRESQL' : 'EMBEDDED_JSON',
+      persistent,
+      warning: persistent
+        ? null
+        : 'Data is NOT persistent. It is lost on every deploy/restart. Set DATABASE_URL on this host.'
+    }
   });
 });
 

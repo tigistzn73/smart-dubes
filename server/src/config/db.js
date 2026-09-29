@@ -498,6 +498,22 @@ function executeMemoryQuery(text, params = []) {
     return [{ rowCount: 1 }];
   }
 
+  // 18b. UPDATE merchants ... (settlement / bank account details)
+  if (/update\s+merchants/i.test(sql)) {
+    const id = params[params.length - 1];
+    const merchant = store.merchants.find(m => m.id === id);
+    if (merchant) {
+      const next = { ...merchant };
+      for (let i = 0; i < params.length - 1; i++) {
+        const match = sql.match(new RegExp('([a-z_]+)\\s*=\\s*\\$' + (i + 1) + '(?![0-9])', 'i'));
+        if (match) next[match[1]] = params[i];
+      }
+      store.merchants = store.merchants.map(m => (m.id === id ? next : m));
+    }
+    saveStore();
+    return [{ rowCount: 1 }];
+  }
+
   // 19. SELECT * FROM audit_logs ...
   if (/select\s+\*\s+from\s+audit_logs/i.test(sql)) {
     return store.audit_logs.slice(-100).reverse();

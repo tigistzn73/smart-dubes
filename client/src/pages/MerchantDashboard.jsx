@@ -128,6 +128,18 @@ export const MerchantDashboard = () => {
   // View Dube Items Modal State
   const [itemsModalCustomer, setItemsModalCustomer] = useState(null);
 
+  // Credit Limit & Status Modal State
+  const [limitModalCustomer, setLimitModalCustomer] = useState(null);
+  const [limitInput, setLimitInput] = useState('');
+  const [limitSaving, setLimitSaving] = useState(false);
+  const [limitError, setLimitError] = useState('');
+  const [limitSuccess, setLimitSuccess] = useState('');
+
+  // Bank Account Settings State
+  const [bankForm, setBankForm] = useState({ bankName: '', accountName: '', accountNumber: '' });
+  const [bankSaving, setBankSaving] = useState(false);
+  const [bankMessage, setBankMessage] = useState(null);
+
   const token = localStorage.getItem('smart_dube_token');
 
   useEffect(() => {
@@ -147,7 +159,14 @@ export const MerchantDashboard = () => {
       const cData = await cRes.json();
       const tData = await tRes.json();
 
-      if (mData.merchant) setMerchant(mData.merchant);
+      if (mData.merchant) {
+        setMerchant(mData.merchant);
+        setBankForm({
+          bankName: mData.merchant.bank_name || '',
+          accountName: mData.merchant.account_name || '',
+          accountNumber: mData.merchant.account_number || ''
+        });
+      }
       if (cData.customers) setCustomers(cData.customers);
       if (tData.transactions) setTransactions(tData.transactions);
       if (tData.repayments) setRepayments(tData.repayments);
@@ -155,6 +174,67 @@ export const MerchantDashboard = () => {
       console.error('Fetch Merchant Error:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openLimitModal = (customer) => {
+    setLimitModalCustomer(customer);
+    setLimitInput(String(customer.credit_limit ?? 0));
+    setLimitError('');
+    setLimitSuccess('');
+  };
+
+  const saveCustomerUpdate = async (status) => {
+    if (!limitModalCustomer) return;
+    setLimitSaving(true);
+    setLimitError('');
+    setLimitSuccess('');
+    try {
+      const res = await fetch(`/api/merchant/customers/${limitModalCustomer.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ creditLimit: parseFloat(limitInput), status })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update customer');
+
+      setCustomers(prev => prev.map(c => (c.id === limitModalCustomer.id
+        ? { ...c, credit_limit: data.customer.creditLimit, current_balance: data.customer.currentBalance, status: data.customer.status }
+        : c)));
+      setLimitModalCustomer(prev => ({ ...prev, ...data.customer, credit_limit: data.customer.creditLimit, current_balance: data.customer.currentBalance, status: data.customer.status }));
+      setLimitInput(String(data.customer.creditLimit));
+      setLimitSuccess(data.message || 'Saved');
+      setTimeout(() => setLimitSuccess(''), 3000);
+    } catch (err) {
+      setLimitError(err.message);
+    } finally {
+      setLimitSaving(false);
+    }
+  };
+
+  const saveBankAccount = async (e) => {
+    e.preventDefault();
+    setBankSaving(true);
+    setBankMessage(null);
+    try {
+      const res = await fetch('/api/merchant/bank-account', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(bankForm)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save bank details');
+      setMerchant(prev => (prev ? { ...prev, ...data.bankAccount } : prev));
+      setBankForm({
+        bankName: data.bankAccount.bank_name || '',
+        accountName: data.bankAccount.account_name || '',
+        accountNumber: data.bankAccount.account_number || ''
+      });
+      setBankMessage({ type: 'success', text: data.message });
+    } catch (err) {
+      setBankMessage({ type: 'error', text: err.message });
+    } finally {
+      setBankSaving(false);
     }
   };
 
@@ -984,6 +1064,83 @@ export const MerchantDashboard = () => {
               </div>
             </div>
 
+            {/* Bank Account Details for Customer Payments */}
+            <form onSubmit={saveBankAccount} className="glass-card p-5 rounded-2xl border border-slate-800/80 space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono flex items-center gap-2">
+                    <Receipt className="w-4 h-4 text-emerald-400" />
+                    {t('Bank Account for Customer Payments', 'የደንበኞች ክፍያ የባንክ መለያ')}
+                  </h4>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    {t('Customers see these details when they choose bank transfer and pay, then upload the receipt.', 'ደንበኞች የባንክ ዝውውር ሲመርጡ እነዚህን መረጃዎች በመክፈል አላቸው ደረሰኝ ይጫናቸዋል።')}
+                  </p>
+                </div>
+                {merchant?.bank_name && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
+                    {t('ACTIVE', 'ንቁ')}
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono mb-1.5">
+                    {t('Bank Name', 'የባንክ ስም')}
+                  </label>
+                  <input
+                    type="text"
+                    value={bankForm.bankName}
+                    onChange={e => setBankForm(prev => ({ ...prev, bankName: e.target.value }))}
+                    placeholder={t('e.g. Commercial Bank of Ethiopia', 'ምሳሌ CBE')}
+                    maxLength={100}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono mb-1.5">
+                    {t('Account Holder', 'የሂሳብ ተባላሪ')}
+                  </label>
+                  <input
+                    type="text"
+                    value={bankForm.accountName}
+                    onChange={e => setBankForm(prev => ({ ...prev, accountName: e.target.value }))}
+                    placeholder={t('Store / company name', 'የድርጅት ስም')}
+                    maxLength={200}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono mb-1.5">
+                    {t('Account Number', 'የሂሳብ ቁጥር')}
+                  </label>
+                  <input
+                    type="text"
+                    value={bankForm.accountNumber}
+                    onChange={e => setBankForm(prev => ({ ...prev, accountNumber: e.target.value }))}
+                    placeholder={t('e.g. 1000 2345 6789 0123', 'ምሳሌ 1000 2345 6789 0123')}
+                    maxLength={50}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-3">
+                <p className={`text-[11px] font-semibold ${bankMessage?.type === 'error' ? 'text-red-400' : 'text-emerald-400'}`}>
+                  {bankMessage?.text || (!bankForm.bankName && !bankForm.accountName && !bankForm.accountNumber
+                    ? t('Fill all three fields, or clear all three to hide bank details from customers.', 'ሦስቱንም መስኮች ይሞሉ፣ ወይም ሦስቱንም አጽዳ አላስቀምጡ።')
+                    : '')}
+                </p>
+                <button
+                  type="submit"
+                  disabled={bankSaving}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all disabled:opacity-50 shrink-0"
+                >
+                  {bankSaving ? t('Saving...', 'በማስቀመጥ ላይ...') : t('Save Bank Details', 'ባንክ መረጃ አስቀምጥ')}
+                </button>
+              </div>
+            </form>
+
             {/* Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Daily Sales Trend Line Graph */}
@@ -1298,6 +1455,15 @@ export const MerchantDashboard = () => {
                     >
                       <Eye className="w-3.5 h-3.5" />
                       <span>{t('Items', 'እቃዎች')}</span>
+                    </button>
+
+                    <button
+                      onClick={() => openLimitModal(customer)}
+                      className="px-2.5 py-1.5 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-400 text-xs font-semibold border border-sky-500/30 flex items-center justify-center gap-1 transition-all cursor-pointer"
+                      title={t('Adjust Credit Limit or Block Customer', 'የክሬዲት ወሰን አስተካክል ወይም ደንበኛውን አጥፋ')}
+                    >
+                      <DollarSign className="w-3.5 h-3.5" />
+                      <span>{t('Limit', 'ወሰን')}</span>
                     </button>
 
                     <button
@@ -1728,6 +1894,107 @@ export const MerchantDashboard = () => {
       )}
 
       {/* VIEW DUBE ITEMS & BALANCE BREAKDOWN MODAL */}
+      {limitModalCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setLimitModalCustomer(null)} />
+          <div className="relative glass-card rounded-2xl border border-slate-700 w-full max-w-md p-5 space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-bold text-slate-100 text-sm">{t('Manage Credit Limit', 'የክሬዲት ወሰን አስተዳድር')}</h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {limitModalCustomer.full_name} • {limitModalCustomer.phone}
+                </p>
+              </div>
+              <button
+                onClick={() => setLimitModalCustomer(null)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-all cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-800 text-center">
+                <p className="text-[10px] uppercase font-mono text-slate-500 font-bold">{t('Outstanding', 'ያልተከፈለ')}</p>
+                <p className="text-base font-extrabold text-amber-400 mt-0.5">{parseFloat(limitModalCustomer.current_balance || 0).toFixed(2)} ETB</p>
+              </div>
+              <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-800 text-center">
+                <p className="text-[10px] uppercase font-mono text-slate-500 font-bold">{t('Overdue Dubes', 'ያለፈበት ዱቤ')}</p>
+                <p className="text-base font-extrabold text-red-400 mt-0.5">{parseInt(limitModalCustomer.overdue_count || 0)}</p>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono mb-1.5">
+                {t('New Credit Limit (ETB)', 'አዲስ የክሬዲት ወሰን (ETB)')}
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={limitInput}
+                onChange={e => setLimitInput(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-slate-100 font-mono focus:outline-none focus:border-emerald-500"
+              />
+              <p className="text-[10px] text-slate-500 mt-1.5">
+                {t('Cannot be set below the outstanding balance.', 'ከያልተከፈለው ቀሪ ሂሳብ በታች ሊሆን አይችልም።')}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-slate-500 uppercase font-mono">{t('Status:', 'ሁኔታ፦')}</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                limitModalCustomer.status === 'ACTIVE'
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                  : limitModalCustomer.status === 'RESTRICTED'
+                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                  : 'bg-red-500/20 text-red-400 border border-red-500/30'
+              }`}>
+                {limitModalCustomer.status}
+              </span>
+            </div>
+
+            {limitError && (
+              <p className="text-[11px] font-semibold text-red-400 bg-red-950/20 border border-red-500/20 rounded-lg p-2.5">{limitError}</p>
+            )}
+            {limitSuccess && (
+              <p className="text-[11px] font-semibold text-emerald-400 bg-emerald-950/20 border border-emerald-500/20 rounded-lg p-2.5">{limitSuccess}</p>
+            )}
+
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <button
+                onClick={() => saveCustomerUpdate(limitModalCustomer.status)}
+                disabled={limitSaving}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all disabled:opacity-50"
+              >
+                {limitSaving ? t('Saving...', 'በማስቀመጥ ላይ...') : t('Save Limit', 'ወሰን አስቀምጥ')}
+              </button>
+              <button
+                onClick={() => saveCustomerUpdate('BLOCKED')}
+                disabled={limitSaving || limitModalCustomer.status === 'BLOCKED'}
+                className="px-3 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-400 text-xs font-bold border border-red-500/30 transition-all disabled:opacity-40"
+              >
+                {t('Block', 'አጥፋ')}
+              </button>
+              <button
+                onClick={() => saveCustomerUpdate('ACTIVE')}
+                disabled={limitSaving || limitModalCustomer.status === 'ACTIVE'}
+                className="px-3 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 text-xs font-bold border border-emerald-500/30 transition-all disabled:opacity-40"
+              >
+                {t('Unblock', 'ክፈት')}
+              </button>
+              <button
+                onClick={() => saveCustomerUpdate('RESTRICTED')}
+                disabled={limitSaving || limitModalCustomer.status === 'RESTRICTED'}
+                className="px-3 py-2 rounded-xl bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 text-xs font-bold border border-amber-500/30 transition-all disabled:opacity-40"
+              >
+                {t('Restrict', 'ገደብ')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {itemsModalCustomer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
           <div className="glass-panel w-full max-w-2xl rounded-2xl border border-slate-800 p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">

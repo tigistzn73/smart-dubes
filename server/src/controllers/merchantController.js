@@ -117,17 +117,38 @@ async function updateCustomerProfile(req, res) {
   const { creditLimit, status } = req.body;
 
   try {
-    const merchant = await db.get('SELECT id FROM merchants WHERE user_id = $1', [req.user.id]);
+    const merchant = await db.get('SELECT id, store_name FROM merchants WHERE user_id = $1', [req.user.id]);
+    if (!merchant) {
+      return res.status(400).json({ error: 'Only registered merchants can update customer credit profiles.' });
+    }
     const customer = await db.get('SELECT * FROM customer_profiles WHERE id = $1 AND merchant_id = $2', [customerId, merchant.id]);
-    
+
     if (!customer) {
       return res.status(404).json({ error: 'Customer credit profile not found.' });
     }
 
-    const updatedLimit = creditLimit ? parseFloat(creditLimit) : customer.credit_limit;
+    // Test for presence, not truthiness, so lowering a limit to exactly 0 works
+    const hasLimit = creditLimit !== undefined && creditLimit !== null && creditLimit !== '';
+    const updatedLimit = hasLimit ? parseFloat(creditLimit) : customer.credit_limit;
     const updatedStatus = status || customer.status;
 
+    if (hasLimit && (Number.isNaN(updatedLimit) || updatedLimit < 0)) {
+      return res.status(400).json({ error: 'Credit limit must be a number of 0 or more.' });
+    }
+
+    const balance = parseFloat(customer.current_balance);
+    if (updatedLimit < balance) {
+      return res.status(400).json({
+        error: `Credit limit cannot be below the outstanding balance of ${balance.toFixed(2)} ETB.`,
+        currentBalance: balance,
+        creditLimit: updatedLimit
+      });
+    }
+
     await db.run('UPDATE customer_profiles SET credit_limit = $1, status = $2 WHERE id = $3', [updatedLimit, updatedStatus, customerId]);
+
+    const limitChanged = String(parseFloat(updatedLimit)) !== String(parseFloat(customer.credit_limit));
+    const statusChanged = updatedStatus !== customer.status;
 
     logAudit({
       userId: req.user.id,
@@ -137,8 +158,79 @@ async function updateCustomerProfile(req, res) {
       details: { previousLimit: customer.credit_limit, newLimit: updatedLimit, previousStatus: customer.status, newStatus: updatedStatus }
     });
 
-    res.json({ message: 'Customer credit profile updated successfully.' });
+    // Only nudge the customer when something they can see actually changed
+    if (statusChanged || limitChanged) {
+      const msg = statusChanged && updatedStatus === 'BLOCKED'
+        ? `[Smart Dube] Your Dube credit at ${merchant.store_name} has been blocked. Please contact the store.`
+        : limitChanged
+          ? `[Smart Dube] Your Dube credit limit at ${merchant.store_name} is now ${parseFloat(updatedLimit).toFixed(2)} ETB.`
+          : null;
+      if (msg) {
+        sendSMS({ customerId, phone: customer.phone, message: msg, type: 'CREDIT_ISSUED' });
+      }
+    }
+
+    res.json({
+      message: 'Customer credit profile updated successfully.',
+      customer: {
+        id: customer.id,
+        creditLimit: parseFloat(updatedLimit),
+        currentBalance: balance,
+        status: updatedStatus
+      }
+    });
   } catch (err) {
+    console.error('Update Customer Profile Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+// Save the merchant's settlement (bank) account, so a customer paying by bank
+// transfer can see exactly where to send the money before uploading the receipt.
+async function updateMerchantBankAccount(req, res) {
+  const { bankName, accountName, accountNumber } = req.body;
+
+  try {
+    const merchant = await db.get('SELECT * FROM merchants WHERE user_id = $1', [req.user.id]);
+    if (!merchant) {
+      return res.status(400).json({ error: 'Only registered merchants can set a bank account.' });
+    }
+
+    // Clearing a field is allowed (send an empty string), so a merchant can remove
+    // details they no longer want shown. Trim so a stray space never becomes part
+    // of an account number the customer has to retype.
+    const bank = (bankName || '').trim() || null;
+    const name = (accountName || '').trim() || null;
+    const number = (accountNumber || '').trim() || null;
+
+    // A half-filled account is worse than none: the customer would transfer to an
+    // incomplete destination. Require all three together, or none at all.
+    const filled = [bank, name, number].filter(Boolean).length;
+    if (filled !== 0 && filled !== 3) {
+      return res.status(400).json({ error: 'Provide the bank name, account name and account number together, or leave all three empty.' });
+    }
+
+    await db.run(
+      'UPDATE merchants SET bank_name = $1, account_name = $2, account_number = $3 WHERE id = $4',
+      [bank, name, number, merchant.id]
+    );
+
+    logAudit({
+      userId: req.user.id,
+      actorName: req.user.fullName,
+      action: 'MERCHANT_BANK_ACCOUNT_UPDATED',
+      resource: `Merchant #${merchant.id}`,
+      details: { storeName: merchant.store_name, bankName: bank, accountName: name, accountNumber: number }
+    });
+
+    res.json({
+      message: filled === 0
+        ? 'Bank account details removed.'
+        : 'Bank account details saved. Customers can now see them when paying by bank transfer.',
+      bankAccount: { bank_name: bank, account_name: name, account_number: number }
+    });
+  } catch (err) {
+    console.error('Update Merchant Bank Account Error:', err);
     res.status(500).json({ error: err.message });
   }
 }
@@ -346,6 +438,7 @@ module.exports = {
   getMerchantCustomers,
   registerCustomerProfile,
   updateCustomerProfile,
+  updateMerchantBankAccount,
   createCreditTransaction,
   getMerchantTransactions,
   triggerSMSReminder,

@@ -30,7 +30,8 @@ async function getCustomerDashboard(req, res) {
     
     // Find all customer credit profiles linked to this phone across different merchant ledgers
     const profiles = await db.all(`
-      SELECT cp.*, m.store_name, m.address as store_address, m.business_license_no
+      SELECT cp.*, m.store_name, m.address as store_address, m.business_license_no,
+             m.bank_name, m.account_name, m.account_number
       FROM customer_profiles cp
       JOIN merchants m ON cp.merchant_id = m.id
       WHERE cp.phone = $1 OR cp.user_id = $2
@@ -281,71 +282,36 @@ async function calculateFlexibleInstallments(userId, totalAmount, frequency, _un
     deadlineDate.setDate(deadlineDate.getDate() + 7);
   }
 
-  // Generate valid installment dates based on frequency, numInst, and deadlineDate
-  let installmentDates = [];
-
-  if (frequency === 'WEEKLY') {
-    // Try counting backward from deadlineDate (step = 7 days)
-    const backwardDates = [];
-    for (let i = numInst - 1; i >= 0; i--) {
-      const d = new Date(deadlineDate);
-      d.setDate(deadlineDate.getDate() - i * 7);
-      backwardDates.push(d);
+  // Generate the installment due dates by stepping BACK from deadlineDate, so the
+  // final installment always lands exactly on the receipt's real due date and nothing
+  // is ever due after it. One period is 7 days for WEEKLY and 1 calendar month for
+  // MONTHLY (the day is clamped to each month's length, so Mar 31 -> Feb 28).
+  const isWeekly = frequency === 'WEEKLY';
+  const shiftBack = (base, periods) => {
+    if (isWeekly) {
+      const d = new Date(base);
+      d.setDate(d.getDate() - periods * 7);
+      return d;
     }
+    const targetMonth = base.getMonth() - periods;
+    const targetYear = base.getFullYear() + Math.floor(targetMonth / 12);
+    const normalizedMonth = ((targetMonth % 12) + 12) % 12;
+    const lastDayOfMonth = new Date(targetYear, normalizedMonth + 1, 0).getDate();
+    return new Date(targetYear, normalizedMonth, Math.min(base.getDate(), lastDayOfMonth));
+  };
 
-    // If the earliest backward date is >= today, all installments fit cleanly up to the deadline
-    if (backwardDates[0] >= today) {
-      installmentDates = backwardDates;
-    } else {
-      // If going backward lands before today (e.g. numInst is too large for remaining days),
-      // space them between today and deadline if possible, or forward weekly
-      const diffDays = Math.round((deadlineDate - today) / (1000 * 60 * 60 * 24));
-      if (diffDays >= numInst) {
-        const interval = diffDays / numInst;
-        for (let i = 1; i <= numInst; i++) {
-          const d = new Date(today);
-          d.setDate(today.getDate() + Math.round(i * interval));
-          installmentDates.push(d);
-        }
-      } else {
-        for (let i = 1; i <= numInst; i++) {
-          const d = new Date(today);
-          d.setDate(today.getDate() + i * 7);
-          installmentDates.push(d);
-        }
-      }
-    }
-  } else {
-    // MONTHLY frequency
-    const backwardDates = [];
-    const dlDay = deadlineDate.getDate();
-    const dlMonth = deadlineDate.getMonth();
-    const dlYear = deadlineDate.getFullYear();
+  // A MONTHLY plan must stay one calendar month apart, so when the requested count
+  // cannot fit before the deadline we shorten the plan to the number of whole
+  // periods that do fit (a receipt due inside the coming month gets a single
+  // payment on its due date) rather than squeezing the same payments into day
+  // offsets, which used to pile several "monthly" installments into one month.
+  while (numInst > 1 && shiftBack(deadlineDate, numInst - 1) < today) {
+    numInst -= 1;
+  }
 
-    for (let i = numInst - 1; i >= 0; i--) {
-      const targetMonth = dlMonth - i;
-      const targetYear = dlYear + Math.floor(targetMonth / 12);
-      const normalizedMonth = ((targetMonth % 12) + 12) % 12;
-      const lastDayOfMonth = new Date(targetYear, normalizedMonth + 1, 0).getDate();
-      const targetDay = Math.min(dlDay, lastDayOfMonth);
-      backwardDates.push(new Date(targetYear, normalizedMonth, targetDay));
-    }
-
-    if (backwardDates[0] >= today) {
-      installmentDates = backwardDates;
-    } else {
-      // Going backward lands in past; schedule forward from deadlineDate
-      installmentDates = [];
-      const baseDate = deadlineDate > today ? new Date(deadlineDate) : new Date(today);
-      for (let i = 0; i < numInst; i++) {
-        const targetMonth = baseDate.getMonth() + i;
-        const targetYear = baseDate.getFullYear() + Math.floor(targetMonth / 12);
-        const normalizedMonth = ((targetMonth % 12) + 12) % 12;
-        const lastDayOfMonth = new Date(targetYear, normalizedMonth + 1, 0).getDate();
-        const targetDay = Math.min(baseDate.getDate(), lastDayOfMonth);
-        installmentDates.push(new Date(targetYear, normalizedMonth, targetDay));
-      }
-    }
+  const installmentDates = [];
+  for (let i = numInst - 1; i >= 0; i--) {
+    installmentDates.push(shiftBack(deadlineDate, i));
   }
 
   // Ensure dates are sorted chronologically
@@ -381,6 +347,8 @@ async function calculateFlexibleInstallments(userId, totalAmount, frequency, _un
     amount,
     deadlineDateStr,
     installments,
+    numInstallments: numInst,
+    durationMonths: monthsSpannedBy(installments),
     cpId: cp ? cp.id : null
   };
 }
@@ -412,6 +380,16 @@ async function loadOwnedPendingTransactions(req, ids) {
   return ids.map(id => byId.get(id)).filter(Boolean);
 }
 
+// Real calendar span of a plan, counted from the installment due dates themselves,
+// so a weekly plan is not stored as "N months" in customer_schedules.duration_months.
+function monthsSpannedBy(installments) {
+  if (!Array.isArray(installments) || installments.length === 0) return 1;
+  const first = String(installments[0].dueDate).split('-').map(Number);
+  const last = String(installments[installments.length - 1].dueDate).split('-').map(Number);
+  if (first.length !== 3 || last.length !== 3) return 1;
+  return Math.max(1, (last[0] - first[0]) * 12 + (last[1] - first[1]) + 1);
+}
+
 function deriveSalaryDay(installments, firstPaymentDate) {
   if (firstPaymentDate) {
     const parts = String(firstPaymentDate).split('-');
@@ -432,7 +410,7 @@ function deriveSalaryDay(installments, firstPaymentDate) {
 // receipt's own due date. Only supersedes schedules linked to the same receipt,
 // so scheduling several receipts in a row never wipes the previous ones.
 async function applyScheduleForTransaction({ userId, tx, frequency, numInst, firstPaymentDate }) {
-  const { amount, deadlineDateStr, installments } = await calculateFlexibleInstallments(
+  const { amount, deadlineDateStr, installments, durationMonths } = await calculateFlexibleInstallments(
     userId,
     parseFloat(tx.total_amount),
     frequency,
@@ -459,17 +437,15 @@ async function applyScheduleForTransaction({ userId, tx, frequency, numInst, fir
       amount,
       frequency,
       deriveSalaryDay(installments, firstPaymentDate),
-      numInst,
+      durationMonths,
       JSON.stringify(installments),
       tx.id
     ]
   );
 
-  await db.run(`UPDATE credit_transactions SET due_date = $1 WHERE id = $2`, [
-    installments[installments.length - 1].dueDate,
-    tx.id
-  ]);
-
+  // The receipt keeps its own real due date. A plan only records its installment
+  // dates in customer_schedules, so scheduling never moves (or shortens) the
+  // deadline the receipt was actually issued with.
   return {
     ...inserted,
     transaction_id: tx.id,
@@ -578,7 +554,7 @@ async function saveCustomerSchedule(req, res) {
       });
     }
 
-    const { amount, deadlineDateStr, installments, cpId } = await calculateFlexibleInstallments(
+    const { amount, deadlineDateStr, installments, cpId, durationMonths } = await calculateFlexibleInstallments(
       req.user.id,
       totalAmount,
       frequency,
@@ -622,37 +598,19 @@ async function saveCustomerSchedule(req, res) {
       amount,
       frequency,
       deriveSalaryDay(installments, firstPaymentDate),
-      numInst,
+      durationMonths,
       JSON.stringify(installments),
       selectedIds[0] || null
     ]);
 
-    // Update credit transactions' due_dates to align with the active schedule installment due dates
-    if (selectedIds[0] && installments.length > 0) {
-      const finalDueDate = installments[installments.length - 1].dueDate;
-      await db.run(`UPDATE credit_transactions SET due_date = $1 WHERE id = $2`, [finalDueDate, selectedIds[0]]);
-    } else if (cpId && installments.length > 0) {
-      // Skip receipts that already have their own active plan, otherwise this
-      // aggregate schedule would overwrite the deadlines those plans just set.
-      const pendingTxs = await db.all(`
-        SELECT ct.id FROM credit_transactions ct
-        WHERE ct.customer_id = $1
-          AND ct.status IN ('PENDING', 'PARTIALLY_PAID')
-          AND NOT EXISTS (
-            SELECT 1 FROM customer_schedules cs
-            WHERE cs.transaction_id = ct.id AND cs.status = 'ACTIVE'
-          )
-        ORDER BY ct.created_at ASC
-      `, [cpId]);
-
-      for (let idx = 0; idx < pendingTxs.length; idx++) {
-        const inst = installments[Math.min(idx, installments.length - 1)];
-        await db.run(`UPDATE credit_transactions SET due_date = $1 WHERE id = $2`, [inst.dueDate, pendingTxs[idx].id]);
-      }
-    }
+    // credit_transactions.due_date is deliberately left untouched: a receipt keeps
+    // the real deadline it was issued with, and the plan's installment dates live
+    // only in customer_schedules.installments_json. Overwriting it here used to
+    // pull the deadline forward to the last installment, which made the risk
+    // engine flag receipts OVERDUE before they actually were.
 
     res.status(201).json({
-      message: 'Flexible Repayment Schedule applied successfully! Repayment deadline updated.',
+      message: 'Flexible Repayment Schedule applied successfully!',
       schedule: {
         ...result,
         installments
