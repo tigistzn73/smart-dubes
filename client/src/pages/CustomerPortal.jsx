@@ -638,7 +638,11 @@ export const CustomerPortal = () => {
                           </p>
                         </div>
                       </div>
-
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
 
           {/* TAB 3: PENDING RECEIPTS */}
