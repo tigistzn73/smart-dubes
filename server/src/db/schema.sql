@@ -1,5 +1,6 @@
 -- Smart Dube normalized PostgreSQL schema (3NF)
 
+DROP TABLE IF EXISTS customer_schedules CASCADE;
 DROP TABLE IF EXISTS audit_logs CASCADE;
 DROP TABLE IF EXISTS payment_gateway_logs CASCADE;
 DROP TABLE IF EXISTS sms_notifications CASCADE;
@@ -18,6 +19,7 @@ CREATE TABLE users (
     role VARCHAR(20) NOT NULL CHECK (role IN ('ADMIN', 'MERCHANT', 'CUSTOMER')),
     password_hash TEXT NOT NULL,
     fayda_id VARCHAR(50),
+    photo_url TEXT,
     reset_token VARCHAR(10),
     reset_token_expires TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW()
@@ -115,4 +117,20 @@ CREATE TABLE audit_logs (
     details_json TEXT NOT NULL,
     ip_address VARCHAR(45) NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 9. customer_schedules
+CREATE TABLE customer_schedules (
+    id SERIAL PRIMARY KEY,
+    customer_id INTEGER,
+    user_id INTEGER,
+    total_amount NUMERIC(12, 2) NOT NULL,
+    frequency VARCHAR(20) NOT NULL DEFAULT 'MONTHLY',
+    salary_day INTEGER NOT NULL,
+    duration_months INTEGER NOT NULL DEFAULT 2,
+    installments_json TEXT NOT NULL,
+    transaction_id INTEGER,
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
