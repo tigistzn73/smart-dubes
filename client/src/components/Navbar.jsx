@@ -351,22 +351,6 @@ export const Navbar = () => {
           {/* Theme toggle — always visible, guests and signed in alike */}
           <ThemeToggle />
 
-          {/* Global Fullscreen Toggle Button */}
-          <button
-            onClick={toggleFullscreen}
-            className="px-2.5 py-1.5 rounded-xl border border-slate-700/60 bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-md text-xs font-bold active:scale-95"
-            title={isFullscreen ? t('Exit Fullscreen', 'ከሙሉ ገጽ ውጣ') : t('Fullscreen', 'ሙሉ ገጽ')}
-          >
-            {isFullscreen ? (
-              <Minimize2 className="w-4 h-4 text-emerald-400" />
-            ) : (
-              <Maximize2 className="w-4 h-4 text-sky-400" />
-            )}
-            <span className="hidden sm:inline">
-              {isFullscreen ? t('Exit Fullscreen', 'ውጣ') : t('Fullscreen', 'ሙሉ ገጽ')}
-            </span>
-          </button>
-
           {/* User Profile Button with Integrated Theme Chooser */}
           {user && (
             <div className="flex items-center gap-2 sm:gap-3">
