@@ -1,7 +1,48 @@
 const db = require('../config/database');
 const bcrypt = require('bcryptjs');
 
+// Tables that hold real business data. Never cleared automatically.
+const PROTECTED_TABLES = [
+  'users', 'merchants', 'customer_profiles', 'credit_transactions',
+  'repayments', 'sms_notifications', 'payment_gateway_logs', 'audit_logs'
+];
+
+// Set ALLOW_DESTRUCTIVE_SEED=true only to wipe a database on purpose.
+function destructiveSeedAllowed() {
+  return process.env.ALLOW_DESTRUCTIVE_SEED === 'true';
+}
+
+async function countAllRows() {
+  const counts = {};
+  for (const t of PROTECTED_TABLES) {
+    try {
+      const row = await db.get(`SELECT COUNT(*) as count FROM ${t}`);
+      counts[t] = parseInt(row && row.count, 10) || 0;
+    } catch (e) {
+      counts[t] = 0; // table may not exist yet
+    }
+  }
+  return counts;
+}
+
 async function seedDatabase() {
+  const counts = await countAllRows();
+  const existing = Object.values(counts).reduce((a, b) => a + b, 0);
+
+  if (existing > 0 && !destructiveSeedAllowed()) {
+    console.warn(
+      '[DB] SKIPPING seed: database already contains data ' +
+      `(${Object.entries(counts).filter(([, n]) => n > 0).map(([t, n]) => `${t}=${n}`).join(', ')}).`
+    );
+    console.warn('[DB] Existing records were left untouched. To force a wipe anyway,');
+    console.warn('[DB] set ALLOW_DESTRUCTIVE_SEED=true in server/.env and restart.');
+    return { skipped: true, reason: 'database_not_empty', counts };
+  }
+
+  if (existing > 0) {
+    console.warn(`[DB] ALLOW_DESTRUCTIVE_SEED=true — wiping ${existing} existing rows.`);
+  }
+
   console.log('Seeding Smart Dube database with demo records in PostgreSQL...');
 
   const salt = bcrypt.genSaltSync(10);
@@ -10,15 +51,15 @@ async function seedDatabase() {
   const customerPass = bcrypt.hashSync('customer123', salt);
 
   try {
-    // Clear existing tables
-    await db.run('DELETE FROM audit_logs');
-    await db.run('DELETE FROM sms_notifications');
-    await db.run('DELETE FROM payment_gateway_logs');
-    await db.run('DELETE FROM repayments');
-    await db.run('DELETE FROM credit_transactions');
-    await db.run('DELETE FROM customer_profiles');
-    await db.run('DELETE FROM merchants');
-    await db.run('DELETE FROM users');
+    // Clear existing tables (only reachable when the table is empty, or when
+    // ALLOW_DESTRUCTIVE_SEED=true was set deliberately).
+    for (const t of PROTECTED_TABLES) {
+      try {
+        await db.run(`DELETE FROM ${t}`);
+      } catch (e) {
+        // Table absent on a fresh database - nothing to clear.
+      }
+    }
 
     // 1. Users
     const adminUser = await db.get(`
@@ -112,13 +153,17 @@ async function seedDatabase() {
     `, [adminUser.id, 'Solomon Kebede (Admin)', 'SYSTEM_INIT_SEED', 'DATABASE', '{"status":"Seeded successfully"}', '127.0.0.1']);
 
     console.log('Smart Dube database seeded successfully in PostgreSQL!');
+    return { seeded: true };
   } catch (err) {
     console.error('Seeding failed:', err);
+    return { seeded: false, error: err.message };
   }
 }
 
 if (require.main === module) {
-  seedDatabase().then(() => db.pool.end());
+  seedDatabase().then(() => {
+    if (db.pool) db.pool.end();
+  });
 }
 
 module.exports = seedDatabase;

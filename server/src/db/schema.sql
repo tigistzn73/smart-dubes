@@ -1,17 +1,12 @@
--- Smart Dube normalized PostgreSQL schema (3NF)
-
-DROP TABLE IF EXISTS customer_schedules CASCADE;
-DROP TABLE IF EXISTS audit_logs CASCADE;
-DROP TABLE IF EXISTS payment_gateway_logs CASCADE;
-DROP TABLE IF EXISTS sms_notifications CASCADE;
-DROP TABLE IF EXISTS repayments CASCADE;
-DROP TABLE IF EXISTS credit_transactions CASCADE;
-DROP TABLE IF EXISTS customer_profiles CASCADE;
-DROP TABLE IF EXISTS merchants CASCADE;
-DROP TABLE IF EXISTS users CASCADE;
+﻿-- Smart Dube normalized PostgreSQL schema (3NF)
+--
+-- NOTE: this script CREATES tables only. It deliberately has no DROP
+-- statements. The previous version dropped every table, which meant any
+-- startup path that ran this file erased production data. Recreating a
+-- database from scratch should be an explicit, manual act.
 
 -- 1. users
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     full_name VARCHAR(200) NOT NULL,
     phone VARCHAR(20) UNIQUE NOT NULL,
@@ -26,7 +21,7 @@ CREATE TABLE users (
 );
 
 -- 2. merchants
-CREATE TABLE merchants (
+CREATE TABLE IF NOT EXISTS merchants (
     id SERIAL PRIMARY KEY,
     user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     store_name VARCHAR(200) NOT NULL,
@@ -42,7 +37,7 @@ CREATE TABLE merchants (
 );
 
 -- 3. customer_profiles
-CREATE TABLE customer_profiles (
+CREATE TABLE IF NOT EXISTS customer_profiles (
     id SERIAL PRIMARY KEY,
     merchant_id INT NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
     user_id INT REFERENCES users(id) ON DELETE SET NULL,
@@ -58,7 +53,7 @@ CREATE TABLE customer_profiles (
 );
 
 -- 4. credit_transactions
-CREATE TABLE credit_transactions (
+CREATE TABLE IF NOT EXISTS credit_transactions (
     id SERIAL PRIMARY KEY,
     transaction_ref VARCHAR(100) UNIQUE NOT NULL,
     customer_id INT NOT NULL REFERENCES customer_profiles(id) ON DELETE CASCADE,
@@ -72,7 +67,7 @@ CREATE TABLE credit_transactions (
 );
 
 -- 5. repayments
-CREATE TABLE repayments (
+CREATE TABLE IF NOT EXISTS repayments (
     id SERIAL PRIMARY KEY,
     repayment_ref VARCHAR(100) UNIQUE NOT NULL,
     transaction_id INT REFERENCES credit_transactions(id) ON DELETE SET NULL,
@@ -87,7 +82,7 @@ CREATE TABLE repayments (
 );
 
 -- 6. sms_notifications
-CREATE TABLE sms_notifications (
+CREATE TABLE IF NOT EXISTS sms_notifications (
     id SERIAL PRIMARY KEY,
     customer_id INT REFERENCES customer_profiles(id) ON DELETE SET NULL,
     phone VARCHAR(20) NOT NULL,
@@ -98,7 +93,7 @@ CREATE TABLE sms_notifications (
 );
 
 -- 7. payment_gateway_logs
-CREATE TABLE payment_gateway_logs (
+CREATE TABLE IF NOT EXISTS payment_gateway_logs (
     id SERIAL PRIMARY KEY,
     gateway_name VARCHAR(30) NOT NULL,
     event_type VARCHAR(50) NOT NULL,
@@ -108,7 +103,7 @@ CREATE TABLE payment_gateway_logs (
 );
 
 -- 8. audit_logs
-CREATE TABLE audit_logs (
+CREATE TABLE IF NOT EXISTS audit_logs (
     id SERIAL PRIMARY KEY,
     user_id INT REFERENCES users(id) ON DELETE SET NULL,
     actor_name VARCHAR(200) NOT NULL,
@@ -120,7 +115,7 @@ CREATE TABLE audit_logs (
 );
 
 -- 9. customer_schedules
-CREATE TABLE customer_schedules (
+CREATE TABLE IF NOT EXISTS customer_schedules (
     id SERIAL PRIMARY KEY,
     customer_id INTEGER,
     user_id INTEGER,

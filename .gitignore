@@ -3,3 +3,10 @@ node_modules/
 dist/
 build/
 *.log
+
+# Legacy embedded JSON datastore (removed in favour of PostgreSQL)
+smart_dube_data.json
+
+# Database dumps produced by the migration scripts — these contain
+# password hashes and real customer records, so they must never be committed.
+app_db_backup/
