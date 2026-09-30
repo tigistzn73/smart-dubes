@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { ThemeChooser, ThemeToggle } from './ThemeChooser';
+import { ThemeToggle } from './ThemeChooser';
 import { SettingsModal } from './SettingsModal';
 import { useTheme } from '../context/ThemeContext';
 import {
@@ -326,7 +326,6 @@ export const Navbar = () => {
                   እማ
                 </button>
               </div>
-              <ThemeChooser />
             </div>
           )}
 
@@ -348,6 +347,9 @@ export const Navbar = () => {
               <span className="hidden sm:inline">Inbox Alerts</span>
             </button>
           )}
+
+          {/* Theme toggle — always visible, guests and signed in alike */}
+          <ThemeToggle />
 
           {/* Global Fullscreen Toggle Button */}
           <button
@@ -402,14 +404,6 @@ export const Navbar = () => {
                     <div className="px-3 py-2 border-b border-slate-800">
                       <p className="text-xs font-bold text-slate-200 truncate">{user.fullName}</p>
                       <p className="text-[10px] text-emerald-400 font-mono font-bold uppercase">{user.role}</p>
-                    </div>
-
-                    {/* Theme toggle (dark / light) */}
-                    <div className="px-2 py-2 border-b border-slate-800/80 flex items-center justify-between gap-3">
-                      <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider font-mono px-1">
-                        {lang === 'EN' ? 'Theme' : 'ገጽታ'}
-                      </span>
-                      <ThemeToggle />
                     </div>
 
                     {/* Profile & Settings Button */}
