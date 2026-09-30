@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { ThemeChooser } from './ThemeChooser';
+import { ThemeChooser, ThemeToggle } from './ThemeChooser';
 import { SettingsModal } from './SettingsModal';
 import { useTheme } from '../context/ThemeContext';
 import {
@@ -11,8 +11,6 @@ import {
   ShieldCheck,
   Store,
   Bell,
-  Sun,
-  Moon,
   Menu,
   X,
   Wallet,
@@ -33,7 +31,7 @@ import {
 
 export const Navbar = () => {
   const { user, logout } = useAuth();
-  const { currentTheme, changeTheme, lang, setLang } = useTheme();
+  const { currentTheme, lang, setLang } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -418,32 +416,7 @@ export const Navbar = () => {
                           {currentTheme === 'light' ? (lang === 'EN' ? 'Bright' : 'ብሩህ') : (lang === 'EN' ? 'Black' : 'ጨለማ')}
                         </span>
                       </div>
-                      <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-700/80 shadow-md">
-                        <button
-                          type="button"
-                          onClick={() => changeTheme('light')}
-                          className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                            currentTheme === 'light'
-                              ? 'bg-white text-slate-900 shadow-md shadow-white/20 ring-1 ring-white'
-                              : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
-                          }`}
-                        >
-                          <Sun className={`w-4 h-4 ${currentTheme === 'light' ? 'text-amber-500 fill-amber-500' : 'text-amber-400'}`} />
-                          <span>{lang === 'EN' ? 'Bright' : 'ብሩህ'}</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => changeTheme('default')}
-                          className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                            currentTheme !== 'light'
-                              ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-sky-300 border border-sky-400/40 shadow-md shadow-sky-500/20 ring-1 ring-sky-400/30'
-                              : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
-                          }`}
-                        >
-                          <Moon className={`w-4 h-4 ${currentTheme !== 'light' ? 'text-sky-300 fill-sky-300' : 'text-sky-400'}`} />
-                          <span>{lang === 'EN' ? 'Black' : 'ጨለማ'}</span>
-                        </button>
-                      </div>
+                      <ThemeToggle />
                     </div>
 
                     {/* Profile & Settings Button */}
