@@ -31,7 +31,7 @@ import {
 
 export const Navbar = () => {
   const { user, logout } = useAuth();
-  const { currentTheme, lang, setLang } = useTheme();
+  const { lang, setLang } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -404,18 +404,11 @@ export const Navbar = () => {
                       <p className="text-[10px] text-emerald-400 font-mono font-bold uppercase">{user.role}</p>
                     </div>
 
-                    {/* Unified Single Segmented Button: Theme (Bright & Black) */}
-                    <div className="px-2 py-2 border-b border-slate-800/80 space-y-1.5">
-                      <div className="flex items-center justify-between text-[10px] font-bold text-slate-300 uppercase tracking-wider font-mono px-1">
-                        <span>{lang === 'EN' ? 'Theme' : 'ገጽታ'}</span>
-                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
-                          currentTheme === 'light'
-                            ? 'bg-amber-400/20 text-amber-300 border border-amber-400/30'
-                            : 'bg-sky-400/20 text-sky-300 border border-sky-400/30'
-                        }`}>
-                          {currentTheme === 'light' ? (lang === 'EN' ? 'Bright' : 'ብሩህ') : (lang === 'EN' ? 'Black' : 'ጨለማ')}
-                        </span>
-                      </div>
+                    {/* Theme toggle (dark / light) */}
+                    <div className="px-2 py-2 border-b border-slate-800/80 flex items-center justify-between gap-3">
+                      <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider font-mono px-1">
+                        {lang === 'EN' ? 'Theme' : 'ገጽታ'}
+                      </span>
                       <ThemeToggle />
                     </div>
 

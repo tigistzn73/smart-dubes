@@ -2,50 +2,34 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { Sun, Moon, Check } from 'lucide-react';
 
-// Compact Bright / Black switch. The selection is written to localStorage by
-// ThemeContext, so it survives reloads and reopening the browser.
+// Single icon toggle that switches between the dark and light themes. The
+// choice is written to localStorage by ThemeContext, so it survives reloads
+// and reopening the browser.
 export const ThemeToggle = ({ className = '' }) => {
   const { currentTheme, changeTheme, lang } = useTheme();
   const t = (en, am) => (lang === 'EN' ? en : am);
   const isLight = currentTheme === 'light';
 
-  const btn = (isActive, onClick, Icon, label, activeCls, idleCls) => (
+  return (
     <button
       type="button"
-      onClick={onClick}
-      aria-pressed={isActive}
-      className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-        isActive ? activeCls : idleCls
-      }`}
+      onClick={() => changeTheme(isLight ? 'default' : 'light')}
+      role="switch"
+      aria-checked={isLight}
+      title={isLight ? t('Switch to dark', 'ወደ ጨለማ ቀይር') : t('Switch to light', 'ወደ ብሩህ ቀይር')}
+      aria-label={isLight ? t('Switch to dark theme', 'ወደ ጨለማ ገጽታ ቀይር') : t('Switch to light theme', 'ወደ ብሩህ ገጽታ ቀይር')}
+      className={`w-9 h-9 shrink-0 rounded-xl border flex items-center justify-center transition-all cursor-pointer shadow-md ${
+        isLight
+          ? 'bg-amber-400/20 border-amber-400/40 text-amber-500 hover:bg-amber-400/30'
+          : 'bg-slate-800/80 border-slate-700/60 text-sky-300 hover:bg-slate-700/80'
+      } ${className}`}
     >
-      <Icon className="w-4 h-4" />
-      <span>{label}</span>
+      {isLight ? (
+        <Sun className="w-4 h-4" />
+      ) : (
+        <Moon className="w-4 h-4" />
+      )}
     </button>
-  );
-
-  return (
-    <div
-      role="group"
-      aria-label={t('Theme', 'ገጽታ')}
-      className={`flex items-center bg-slate-950 p-1 rounded-xl border border-slate-700/80 shadow-md ${className}`}
-    >
-      {btn(
-        isLight,
-        () => changeTheme('light'),
-        (p) => <Sun {...p} />,
-        t('Bright', 'ብሩህ'),
-        'bg-white text-slate-900 shadow-md shadow-white/20 ring-1 ring-white',
-        'text-slate-300 hover:text-white hover:bg-slate-800/60'
-      )}
-      {btn(
-        !isLight,
-        () => changeTheme('default'),
-        (p) => <Moon {...p} />,
-        t('Black', 'ጨለማ'),
-        'bg-gradient-to-r from-slate-800 to-slate-700 text-sky-300 border border-sky-400/40 shadow-md shadow-sky-500/20 ring-1 ring-sky-400/30',
-        'text-slate-300 hover:text-white hover:bg-slate-800/60'
-      )}
-    </div>
   );
 };
 

@@ -230,12 +230,12 @@ export const Login = () => {
           <p className="text-[10px] text-slate-400">{t('Ethiopian BNPL Credit & Repayment Framework', 'የኢትዮጵያ የዱቤ ብድር እና ክፍያ ስርዓት')}</p>
         </div>
 
-        {/* Bright / Black switch — reachable before signing in */}
+        {/* Bright / Black toggle — reachable before signing in */}
         <div className="flex items-center justify-between gap-3 px-1">
           <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider font-mono">
             {t('Theme', 'ገጽታ')}
           </span>
-          <ThemeToggle className="w-40" />
+          <ThemeToggle />
         </div>
 
 
