@@ -342,7 +342,7 @@ export const Login = () => {
               <p className="text-xs text-slate-400">Register as a Merchant or Customer with Fayda KYC</p>
             </div>
 
-            <form onSubmit={handleRegister} className="space-y-4">
+            <form onSubmit={handleRegister} className="space-y-4" autoComplete="off">
               {/* Role Selector */}
               <div>
                 <label className="block text-xs font-bold text-slate-200 mb-2">Account Type:</label>
@@ -373,6 +373,8 @@ export const Login = () => {
                 <label className="block text-xs font-semibold text-slate-300 mb-1">Full Name:</label>
                 <input
                   type="text"
+                  name="fullName"
+                  autoComplete="name"
                   placeholder="e.g. Abebe Bikila"
                   value={regForm.fullName}
                   onChange={e => setRegForm({ ...regForm, fullName: e.target.value })}
@@ -388,6 +390,8 @@ export const Login = () => {
                   <Phone className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
                   <input
                     type="text"
+                    name="phone"
+                    autoComplete="tel"
                     placeholder="+251911..."
                     value={regForm.phone}
                     onChange={e => setRegForm({ ...regForm, phone: e.target.value })}
@@ -404,8 +408,15 @@ export const Login = () => {
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+                  {/* autoComplete="off" keeps the field empty so the placeholder is all
+                      that shows. Without a name/autocomplete pair the browser has no
+                      way to tell which box a saved phone number belongs in, and was
+                      filling one into this email field. Marking the phone input
+                      autoComplete="tel" above gives it somewhere correct to go. */}
                   <input
                     type="email"
+                    name="email"
+                    autoComplete="off"
                     placeholder="email@example.com"
                     value={regForm.email}
                     onChange={e => setRegForm({ ...regForm, email: e.target.value })}
@@ -425,6 +436,8 @@ export const Login = () => {
                 <input
                   type="text"
                   placeholder="FYD-1234-5678-90"
+                  name="faydaId"
+                  autoComplete="off"
                   value={regForm.faydaId}
                   onChange={e => setRegForm({ ...regForm, faydaId: e.target.value })}
                   className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-sky-500"
@@ -442,6 +455,8 @@ export const Login = () => {
                       <input
                         type="text"
                         placeholder="e.g. Arada Neighborhood Supermarket"
+                    name="storeName"
+                    autoComplete="organization"
                         value={regForm.storeName}
                         onChange={e => setRegForm({ ...regForm, storeName: e.target.value })}
                         className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
@@ -455,6 +470,8 @@ export const Login = () => {
                       <input
                         type="text"
                         placeholder="e.g. BL-ADDIS-2025-0001"
+                        name="businessLicenseNo"
+                        autoComplete="off"
                         value={regForm.businessLicenseNo}
                         onChange={e => setRegForm({ ...regForm, businessLicenseNo: e.target.value })}
                         className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-emerald-500"
@@ -468,6 +485,8 @@ export const Login = () => {
                       <input
                         type="text"
                         placeholder="e.g. Bole Sub-city, Addis Ababa"
+                      name="address"
+                      autoComplete="street-address"
                         value={regForm.address}
                         onChange={e => setRegForm({ ...regForm, address: e.target.value })}
                         className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
@@ -527,6 +546,8 @@ export const Login = () => {
                     <input
                       type={showRegPassword ? 'text' : 'password'}
                       placeholder="Min 6 characters"
+                      name="password"
+                      autoComplete="new-password"
                       value={regForm.password}
                       onChange={e => setRegForm({ ...regForm, password: e.target.value })}
                       className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-10 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-sky-500"
@@ -548,6 +569,8 @@ export const Login = () => {
                     <input
                       type={showRegPassword ? 'text' : 'password'}
                       placeholder="Repeat password"
+                      name="confirmPassword"
+                      autoComplete="new-password"
                       value={regForm.confirmPassword}
                       onChange={e => setRegForm({ ...regForm, confirmPassword: e.target.value })}
                       className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-sky-500"
