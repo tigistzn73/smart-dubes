@@ -980,8 +980,14 @@ setError('');
                     <input
                       key={i}
                       type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       maxLength={1}
                       value={otpCode[i] || ''}
+                      // Lets iOS/Android offer the code straight from the email or
+                      // SMS they just received. Without it the customer has to read
+                      // six digits off a screen and type them by hand.
+                      autoComplete="one-time-code"
                       onChange={e => {
                         const val = e.target.value.replace(/\D/g, '');
                         const newOtp = otpCode.split('');
@@ -991,12 +997,28 @@ setError('');
                           e.target.nextElementSibling.focus();
                         }
                       }}
+                      // maxLength={1} also truncates a paste down to a single
+                      // character, so selecting the code in the email and copying it
+                      // filled only the first box. Spread the pasted digits across
+                      // the remaining boxes instead, starting at this one.
+                      onPaste={e => {
+                        const pasted = (e.clipboardData?.getData('text') || '').replace(/\D/g, '');
+                        if (!pasted) return;
+                        e.preventDefault();
+                        const boxes = [...e.target.parentElement.children];
+                        const slots = otpCode.padEnd(6, ' ').split('');
+                        for (let k = 0; k < pasted.length && i + k < 6; k++) {
+                          slots[i + k] = pasted[k];
+                        }
+                        setOtpCode(slots.join('').replace(/\s/g, ''));
+                        boxes[Math.min(i + pasted.length, 5)]?.focus();
+                      }}
                       onKeyDown={e => {
                         if (e.key === 'Backspace' && !otpCode[i] && e.target.previousElementSibling) {
                           e.target.previousElementSibling.focus();
                         }
                       }}
-                      className="w-11 h-13 rounded-xl bg-slate-950 border border-slate-700/80 text-center text-lg font-extrabold text-amber-400 focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20 transition-all shadow-inner"
+                      className="w-11 h-14 rounded-xl bg-slate-950 border border-slate-700/80 text-center text-lg font-extrabold text-amber-400 focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20 transition-all shadow-inner"
                     />
                   ))}
                 </div>
