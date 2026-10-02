@@ -205,6 +205,24 @@ export const SettingsModal = ({ isOpen, onClose }) => {
               </div>
 
               <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800/80 space-y-1">
+                <span className="text-[10px] text-slate-500 uppercase font-mono">Email Address</span>
+                {/* The login response does not carry the email, but /api/auth/me
+                    does and AuthContext re-fetches it on every session start, so
+                    the field arrives a moment after sign-in. Rendering "N/A"
+                    during that window would be a lie: the address exists, it just
+                    has not been fetched yet, so the gap is shown as pending
+                    instead. An account with genuinely no email on file falls
+                    through to "Not provided". */}
+                <p className="font-bold text-sky-400 font-mono text-sm break-words">
+                  {user.email === undefined ? (
+                    <span className="text-slate-500 font-normal animate-pulse">Loading...</span>
+                  ) : (
+                    user.email || 'Not provided'
+                  )}
+                </p>
+              </div>
+
+              <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800/80 space-y-1">
                 <span className="text-[10px] text-slate-500 uppercase font-mono">Ethiopian Fayda ID</span>
                 <p className="font-semibold text-amber-400 font-mono">{user.faydaId || 'FYD-VERIFIED'}</p>
               </div>
