@@ -22,7 +22,7 @@ import {
   Upload
 } from 'lucide-react';
 
-// The phone number is the only thing this page remembers between visits.
+// Remembering the phone number is opt-in, and the password is never stored.
 //
 // Why the password is never stored, displayed or prefilled:
 //
@@ -35,24 +35,70 @@ import {
 //   - Prefilling also trains users to hit "Sign In" without reading the screen,
 //     which is how a shoulder-surfer or a screen-share captures a live password.
 //
-// The phone number carries none of that risk: it is an identifier the user types
-// into a public field anyway, and remembering it saves re-keying it.
+// The phone number is treated differently: it is not a secret, but it is a
+// permanent account pointer. Left in storage on a shared or public machine it
+// tells whoever picks up the next exactly which account to target, and it is one
+// more way to confirm to an attacker that a guessed phone number is registered.
+// So it is only written once the user has explicitly asked for it, and un-ticking
+// the box deletes it rather than merely stopping the writes.
 const LAST_PHONE_KEY = 'smart_dube_last_phone';
+const REMEMBER_FLAG_KEY = 'smart_dube_remember_phone';
 
 // Deliberately shape-checked rather than trusted. localStorage is editable by
 // the user and survives across app versions, so a stale or hand-edited value must
 // not end up rendered into the field unchecked.
 const PHONE_SHAPE = /^\+?\d[\d\s-]{6,}$/;
 
-/** The phone number to show on load: the last one signed in with, if valid. */
+/**
+ * Whether the user asked for their number to be remembered on this device.
+ *
+ * The flag itself is safe to keep in plain text: it is a boolean preference, not
+ * a credential, and on its own it reveals nothing.
+ */
+function readRememberOptIn() {
+  try {
+    return window.localStorage.getItem(REMEMBER_FLAG_KEY) === '1';
+  } catch {
+    // Storage can throw outright in private browsing or when blocked by policy.
+    // Failing to read the preference just means "not remembered", which is the
+    // safe direction to fail in.
+    return false;
+  }
+}
+
+function writeRememberOptIn(enabled) {
+  try {
+    if (enabled) {
+      window.localStorage.setItem(REMEMBER_FLAG_KEY, '1');
+    } else {
+      window.localStorage.removeItem(REMEMBER_FLAG_KEY);
+    }
+  } catch {
+    // Same reasoning as above: a storage failure must not break sign-in.
+  }
+}
+
+/** Forget the stored number. Used when the user opts out, to clear what is there. */
+function forgetPhone() {
+  try {
+    window.localStorage.removeItem(LAST_PHONE_KEY);
+  } catch {
+    // Nothing to do; if storage is blocked there was nothing stored to remove.
+  }
+}
+
+/**
+ * The phone number to show on load.
+ *
+ * Returns the default unless the user previously opted in, so the remembered
+ * number is never surfaced on a device where remembering was not requested.
+ */
 function readRememberedPhone() {
+  if (!readRememberOptIn()) return '+251';
   try {
     const saved = window.localStorage.getItem(LAST_PHONE_KEY);
     return saved && PHONE_SHAPE.test(saved) ? saved : '+251';
   } catch {
-    // Storage can throw outright in private browsing or when blocked by policy.
-    // Remembering the number is a convenience, so failing to read it just means
-    // the field starts blank.
     return '+251';
   }
 }
@@ -60,9 +106,10 @@ function readRememberedPhone() {
 /**
  * Remember the phone number after a successful sign-in.
  *
- * Takes the value to store as its argument and writes nothing else. There is no
- * code path that can hand this function a password, so no code path can persist
- * one.
+ * Callers gate this on the opt-in flag. The function still validates its input,
+ * so a caller that forgets to check cannot store junk. It takes the value to
+ * store as its argument and writes nothing else, so there is no code path that
+ * can hand it a password.
  */
 function rememberPhone(value) {
   try {
@@ -88,6 +135,20 @@ export const Login = () => {
   // never restored, so it is never on screen when the page loads.
   const [phone, setPhone] = useState(readRememberedPhone);
   const [password, setPassword] = useState('');
+  // Prefers "not remembered", so a device that never opted in stores nothing.
+  const [rememberPhoneOptIn, setRememberPhoneOptIn] = useState(readRememberOptIn);
+
+  // Ticking the box takes effect at once rather than waiting for a successful
+  // sign-in, so the number the user just typed is already saved if they reload.
+  // Un-ticking deletes what was stored instead of only stopping future writes,
+  // because leaving a stale account pointer behind after opting out is the exact
+  // outcome the opt-in exists to prevent.
+  const handleRememberPhoneToggle = (enabled) => {
+    setRememberPhoneOptIn(enabled);
+    writeRememberOptIn(enabled);
+    if (enabled) rememberPhone(phone);
+    else forgetPhone();
+  };
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -140,11 +201,11 @@ export const Login = () => {
       }
       
       if (!res.ok) throw new Error(data.error || 'Login failed. Please check your credentials.');
-      // Remember the number only after the credentials are accepted, so a typo is
-      // not saved and re-offered next time. The server's canonical form is used
-      // rather than the raw input, so the stored value is one this server will
-      // recognise next time.
-      rememberPhone(data.user?.phone || phone);
+      // Only when the user asked for it, and only after the credentials are
+      // accepted, so a typo is not saved and re-offered next time. The server's
+      // canonical form is used rather than the raw input, so the stored value is
+      // one this server will recognise next time.
+      if (rememberPhoneOptIn) rememberPhone(data.user?.phone || phone);
       loginWithToken(data.token, data.user);
     } catch (err) {
       setError(err.message);
@@ -362,6 +423,15 @@ export const Login = () => {
               </div>
 
               <div className="flex items-center justify-between text-xs pt-0.5">
+                <label className="flex items-center gap-1.5 cursor-pointer text-slate-400 hover:text-slate-200 select-none">
+                  <input
+                    type="checkbox"
+                    checked={rememberPhoneOptIn}
+                    onChange={e => handleRememberPhoneToggle(e.target.checked)}
+                    className="w-3.5 h-3.5 accent-emerald-500 cursor-pointer"
+                  />
+                  {t('Remember this device', 'ይህን መሣሪያ ይቀዳሽ')}
+                </label>
                 <button
                   type="button"
                   onClick={() => switchView('FORGOT_PASSWORD')}
