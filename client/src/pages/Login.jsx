@@ -400,7 +400,7 @@ export const Login = () => {
               {/* Email */}
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Email Address <span className="text-slate-500 font-normal">(optional)</span>:
+                  Email Address:
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
