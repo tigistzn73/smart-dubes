@@ -22,6 +22,59 @@ import {
   Upload
 } from 'lucide-react';
 
+// The phone number is the only thing this page remembers between visits.
+//
+// Why the password is never stored, displayed or prefilled:
+//
+//   - localStorage is plain text, readable by any script on the origin and by
+//     anyone with access to the machine. A password written there is not
+//     protected in any way, unlike the bcrypt hash the server keeps.
+//   - This file previously seeded the field with a hardcoded 'merchant123', so
+//     every visitor's password box was prefilled and readable in plain text
+//     before touching the keyboard.
+//   - Prefilling also trains users to hit "Sign In" without reading the screen,
+//     which is how a shoulder-surfer or a screen-share captures a live password.
+//
+// The phone number carries none of that risk: it is an identifier the user types
+// into a public field anyway, and remembering it saves re-keying it.
+const LAST_PHONE_KEY = 'smart_dube_last_phone';
+
+// Deliberately shape-checked rather than trusted. localStorage is editable by
+// the user and survives across app versions, so a stale or hand-edited value must
+// not end up rendered into the field unchecked.
+const PHONE_SHAPE = /^\+?\d[\d\s-]{6,}$/;
+
+/** The phone number to show on load: the last one signed in with, if valid. */
+function readRememberedPhone() {
+  try {
+    const saved = window.localStorage.getItem(LAST_PHONE_KEY);
+    return saved && PHONE_SHAPE.test(saved) ? saved : '+251';
+  } catch {
+    // Storage can throw outright in private browsing or when blocked by policy.
+    // Remembering the number is a convenience, so failing to read it just means
+    // the field starts blank.
+    return '+251';
+  }
+}
+
+/**
+ * Remember the phone number after a successful sign-in.
+ *
+ * Takes the value to store as its argument and writes nothing else. There is no
+ * code path that can hand this function a password, so no code path can persist
+ * one.
+ */
+function rememberPhone(value) {
+  try {
+    const trimmed = String(value || '').trim();
+    if (PHONE_SHAPE.test(trimmed)) {
+      window.localStorage.setItem(LAST_PHONE_KEY, trimmed);
+    }
+  } catch {
+    // Same reasoning as above: a storage failure must not break sign-in.
+  }
+}
+
 export const Login = () => {
   const { loginWithToken, switchDemoRole, register, forgotPassword, resetPassword } = useAuth();
   const { lang, setLang } = useTheme();
@@ -31,8 +84,10 @@ export const Login = () => {
   const [authView, setAuthView] = useState('SIGN_IN');
 
   // Sign In State
-  const [phone, setPhone] = useState('+251911223344');
-  const [password, setPassword] = useState('merchant123');
+  // Prefilled from the last successful sign-in. The password starts empty and is
+  // never restored, so it is never on screen when the page loads.
+  const [phone, setPhone] = useState(readRememberedPhone);
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -85,6 +140,11 @@ export const Login = () => {
       }
       
       if (!res.ok) throw new Error(data.error || 'Login failed. Please check your credentials.');
+      // Remember the number only after the credentials are accepted, so a typo is
+      // not saved and re-offered next time. The server's canonical form is used
+      // rather than the raw input, so the stored value is one this server will
+      // recognise next time.
+      rememberPhone(data.user?.phone || phone);
       loginWithToken(data.token, data.user);
     } catch (err) {
       setError(err.message);
@@ -215,6 +275,10 @@ export const Login = () => {
     setError('');
     setSuccess('');
     setDemoOTP('');
+    // Dropping the typed password when leaving sign-in keeps it off the screen
+    // while the register or reset form is shown, and means returning to sign-in
+    // gives an empty box rather than the previous attempt still sitting there.
+    setPassword('');
   };
 
   return (
@@ -263,6 +327,8 @@ export const Login = () => {
                   <Phone className="w-3.5 h-3.5 text-emerald-400 absolute left-3 top-3" />
                   <input
                     type="text"
+                    name="phone"
+                    autoComplete="tel"
                     value={phone}
                     onChange={e => setPhone(e.target.value)}
                     placeholder="+251911..."
@@ -278,6 +344,8 @@ export const Login = () => {
                   <Lock className="w-3.5 h-3.5 text-emerald-400 absolute left-3 top-3" />
                   <input
                     type={showPassword ? 'text' : 'password'}
+                    name="password"
+                    autoComplete="current-password"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     className="w-full bg-slate-950/90 border border-slate-700/80 rounded-xl pl-9 pr-9 py-2.5 text-xs text-slate-100 font-medium focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 transition-all shadow-inner"
