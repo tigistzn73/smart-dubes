@@ -6,7 +6,13 @@ services:
     region: oregon
     branch: main
     autoDeploy: true
-    buildCommand: npm install --prefix client && npm run build --prefix client && npm install --prefix server
+    # Both migrations are idempotent, so running them on every deploy is safe.
+    # migrate:auth-lockout adds the lockout and OTP columns; migrate:email-required
+    # makes users.email NOT NULL and unique, which the password-reset OTP depends
+    # on. Order matters: email-required reads the reset columns' table only for
+    # its own checks, and neither depends on the other's output, but running them
+    # in sequence is clearer than in parallel.
+    buildCommand: npm install --prefix client && npm run build --prefix client && npm install --prefix server && npm run migrate:auth-lockout --prefix server && npm run migrate:email-required --prefix server
     startCommand: npm start --prefix server
     healthCheckPath: /api/health
     envVars:
@@ -26,5 +32,54 @@ services:
         sync: false
       - key: AT_SENDER_ID
         sync: false
+      # sandbox = free test endpoint, nothing is billed or actually delivered.
+      # Switch to live only once a sender ID is approved and real SMS is wanted.
       - key: AT_ENV
-        value: live
+        value: sandbox
+      # Twilio SMS/MMS. The only gateway that can carry the court letter image,
+      # and the preferred one. Trial accounts only reach verified recipients.
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_FROM_NUMBER
+        sync: false
+      # Set this INSTEAD of TWILIO_FROM_NUMBER to let a Messaging Service own
+      # the sender number and handle opt-outs.
+      - key: TWILIO_MESSAGING_SERVICE_SID
+        sync: false
+      - key: SMS_GATEWAY_ORDER
+        value: twilio,africastalking
+      # Password-reset OTP delivery. Until SMTP_PASS is set here, email runs in
+      # SIMULATION and the API returns the code in its response — which is fine
+      # for testing and a disclosure risk in production. Do not skip it.
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: '587'
+      - key: SMTP_SECURE
+        value: 'false'
+      - key: SMTP_USER
+        sync: false
+      # A Gmail App Password, not the account password.
+      - key: SMTP_PASS
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      # Fail the send rather than silently downgrading to plaintext if the
+      # STARTTLS handshake does not negotiate.
+      - key: SMTP_REQUIRE_TLS
+        value: 'true'
+      # Brand name in the subject and body of every email the app sends.
+      - key: APP_NAME
+        value: Smart Dube
+      # Render exposes RENDER_EXTERNAL_URL automatically, which is all the
+      # letter image URL needs. Set PUBLIC_BASE_URL only to override it.
+      - key: PUBLIC_BASE_URL
+        sync: false
+    # Render's base image ships no system fonts, and the court letter renderer
+    # draws text from a font file on disk. Without this the letter still issues
+    # and is still sent, but as text rather than as a blank page.
+    apt:
+      packages:
+        - fonts-dejavu-core

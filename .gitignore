@@ -10,3 +10,11 @@ smart_dube_data.json
 # Database dumps produced by the migration scripts — these contain
 # password hashes and real customer records, so they must never be committed.
 app_db_backup/
+
+# Generated API documentation. Regenerate with `npm run export:postman --prefix
+# server` after changing a route. Both the outputs and the generator are excluded
+# because they embed the seeded demo account credentials as literal example
+# values; publishing those puts working logins in the repository history.
+smart-dubes-openapi.json
+smart-dubes.postman_collection.json
+server/scripts/export-postman.js

@@ -32,8 +32,10 @@ import {
   PanelLeftOpen,
   Menu,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Store
 } from 'lucide-react';
+import { getErrorMessage, isValidEthiopianPhone } from '../utils/errorHelper';
 
 export const MerchantDashboard = () => {
   const { lang } = useTheme();
@@ -41,9 +43,10 @@ export const MerchantDashboard = () => {
   const [customers, setCustomers] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [repayments, setRepayments] = useState([]);
+  const [escalationCases, setEscalationCases] = useState([]);
   const [merchant, setMerchant] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('DASHBOARD'); // DASHBOARD | CUSTOMERS | TRANSACTIONS | RECEIPT_APPROVALS
+  const [activeTab, setActiveTab] = useState('DASHBOARD'); // DASHBOARD | CUSTOMERS | TRANSACTIONS | RECEIPT_APPROVALS | ESCALATIONS
   const [logCreditModalOpen, setLogCreditModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [customerPage, setCustomerPage] = useState(1);
@@ -140,6 +143,13 @@ export const MerchantDashboard = () => {
   const [bankSaving, setBankSaving] = useState(false);
   const [bankMessage, setBankMessage] = useState(null);
 
+  // Customer Profile Registration State
+  const [customerRegError, setCustomerRegError] = useState('');
+  const [customerRegSaving, setCustomerRegSaving] = useState(false);
+
+  // SMS Modal Error State
+  const [smsError, setSmsError] = useState('');
+
   const token = localStorage.getItem('smart_dube_token');
 
   useEffect(() => {
@@ -149,15 +159,17 @@ export const MerchantDashboard = () => {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      const [mRes, cRes, tRes] = await Promise.all([
+      const [mRes, cRes, tRes, eRes] = await Promise.all([
         fetch('/api/merchant/profile', { headers: { Authorization: `Bearer ${token}` } }),
         fetch('/api/merchant/customers', { headers: { Authorization: `Bearer ${token}` } }),
-        fetch('/api/merchant/transactions', { headers: { Authorization: `Bearer ${token}` } })
+        fetch('/api/merchant/transactions', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/merchant/escalations', { headers: { Authorization: `Bearer ${token}` } })
       ]);
 
       const mData = await mRes.json();
       const cData = await cRes.json();
       const tData = await tRes.json();
+      const eData = await eRes.json();
 
       if (mData.merchant) {
         setMerchant(mData.merchant);
@@ -170,6 +182,7 @@ export const MerchantDashboard = () => {
       if (cData.customers) setCustomers(cData.customers);
       if (tData.transactions) setTransactions(tData.transactions);
       if (tData.repayments) setRepayments(tData.repayments);
+      if (eData.cases) setEscalationCases(eData.cases);
     } catch (err) {
       console.error('Fetch Merchant Error:', err);
     } finally {
@@ -186,6 +199,11 @@ export const MerchantDashboard = () => {
 
   const saveCustomerUpdate = async (status) => {
     if (!limitModalCustomer) return;
+    const limitNum = parseFloat(limitInput);
+    if (isNaN(limitNum) || limitNum < 0) {
+      setLimitError(t('Credit limit must be a valid number of 0 or more.', 'የዱቤ ገደብ 0 ወይም ከዚያ በላይ ቁጥር መሆን አለበት።'));
+      return;
+    }
     setLimitSaving(true);
     setLimitError('');
     setLimitSuccess('');
@@ -193,10 +211,10 @@ export const MerchantDashboard = () => {
       const res = await fetch(`/api/merchant/customers/${limitModalCustomer.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ creditLimit: parseFloat(limitInput), status })
+        body: JSON.stringify({ creditLimit: limitNum, status })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to update customer');
+      if (!res.ok) throw new Error(getErrorMessage(data, 'Failed to update customer'));
 
       setCustomers(prev => prev.map(c => (c.id === limitModalCustomer.id
         ? { ...c, credit_limit: data.customer.creditLimit, current_balance: data.customer.currentBalance, status: data.customer.status }
@@ -206,7 +224,7 @@ export const MerchantDashboard = () => {
       setLimitSuccess(data.message || 'Saved');
       setTimeout(() => setLimitSuccess(''), 3000);
     } catch (err) {
-      setLimitError(err.message);
+      setLimitError(getErrorMessage(err));
     } finally {
       setLimitSaving(false);
     }
@@ -223,7 +241,7 @@ export const MerchantDashboard = () => {
         body: JSON.stringify(bankForm)
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to save bank details');
+      if (!res.ok) throw new Error(getErrorMessage(data, 'Failed to save bank details'));
       setMerchant(prev => (prev ? { ...prev, ...data.bankAccount } : prev));
       setBankForm({
         bankName: data.bankAccount.bank_name || '',
@@ -232,7 +250,7 @@ export const MerchantDashboard = () => {
       });
       setBankMessage({ type: 'success', text: data.message });
     } catch (err) {
-      setBankMessage({ type: 'error', text: err.message });
+      setBankMessage({ type: 'error', text: getErrorMessage(err) });
     } finally {
       setBankSaving(false);
     }
@@ -309,7 +327,7 @@ export const MerchantDashboard = () => {
         body: JSON.stringify({ repaymentId, action })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) throw new Error(getErrorMessage(data, 'Failed to process payment receipt'));
 
       setSmsFeedback(action === 'APPROVE'
         ? '✅ Payment Receipt Approved! Debt balance updated & SMS receipt sent to customer.'
@@ -318,7 +336,8 @@ export const MerchantDashboard = () => {
 
       fetchDashboardData();
     } catch (err) {
-      alert(err.message);
+      setSmsFeedback(`⚠️ ${getErrorMessage(err)}`);
+      setTimeout(() => setSmsFeedback(''), 5000);
     } finally {
       setApprovingId(null);
     }
@@ -343,11 +362,40 @@ export const MerchantDashboard = () => {
     }, 0);
   };
 
-
-
   // Register Customer Profile
   const handleRegisterCustomer = async (e) => {
     e.preventDefault();
+    setCustomerRegError('');
+
+    if (!newCustomer.fullName || !newCustomer.fullName.trim()) {
+      setCustomerRegError(t('Customer full name is required.', 'የደንበኛ ሙሉ ስም ያስፈልጋል።'));
+      return;
+    }
+
+    const trimmedPhone = (newCustomer.phone || '').trim();
+    if (!trimmedPhone || trimmedPhone === '+251') {
+      setCustomerRegError(t('Customer phone number is required.', 'የደንበኛ ስልክ ቁጥር ያስፈልጋል።'));
+      return;
+    }
+
+    if (!isValidEthiopianPhone(trimmedPhone)) {
+      setCustomerRegError(t('Please enter a valid Ethiopian phone number (e.g. +251911223344 or 0911223344).', 'እባክዎ ትክክለኛ የኢትዮጵያ ስልክ ቁጥር ያስገቡ (ምሳሌ +251911223344 ወይም 0911223344)።'));
+      return;
+    }
+
+    const trimmedFayda = (newCustomer.faydaId || '').trim();
+    if (!trimmedFayda || trimmedFayda === 'FYD-') {
+      setCustomerRegError(t('Fayda ID number is required for KYC compliance.', 'የፋይዳ መታወቂያ ቁጥር ለKYC ህግ ያስፈልጋል።'));
+      return;
+    }
+
+    const limitNum = parseFloat(newCustomer.creditLimit);
+    if (isNaN(limitNum) || limitNum < 0) {
+      setCustomerRegError(t('Max credit limit must be a valid number of 0 or more.', 'ከፍተኛ የዱቤ ገደብ 0 ወይም ከዚያ በላይ ቁጥር መሆን አለበት።'));
+      return;
+    }
+
+    setCustomerRegSaving(true);
     try {
       const res = await fetch('/api/merchant/customers', {
         method: 'POST',
@@ -355,18 +403,26 @@ export const MerchantDashboard = () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify(newCustomer)
+        body: JSON.stringify({
+          fullName: newCustomer.fullName.trim(),
+          phone: trimmedPhone,
+          faydaId: trimmedFayda,
+          creditLimit: limitNum
+        })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to register customer.');
+      if (!res.ok) throw new Error(getErrorMessage(data, 'Failed to register customer.'));
 
       setNewCustomer({ fullName: '', phone: '+251', faydaId: 'FYD-', creditLimit: '5000' });
+      setCustomerRegError('');
       fetchDashboardData();
       setActiveTab('CUSTOMERS');
-      setSmsFeedback('New customer profile registered successfully!');
+      setSmsFeedback(t('New customer profile registered successfully!', 'አዲስ የደንበኛ መገለጫ በተሳካ ሁኔታ ተመዝግቧል!'));
       setTimeout(() => setSmsFeedback(''), 4000);
     } catch (err) {
-      alert(err.message);
+      setCustomerRegError(getErrorMessage(err));
+    } finally {
+      setCustomerRegSaving(false);
     }
   };
 
@@ -375,9 +431,31 @@ export const MerchantDashboard = () => {
     e.preventDefault();
     setRiskFeedback(null);
 
+    if (!selectedCustomerId) {
+      setRiskFeedback({
+        type: 'REJECTED',
+        message: t('Customer Selection Required', 'የደንበኛ ምርጫ ያስፈልጋል'),
+        reason: t('Please select a customer profile from your ledger before recording a sale.', 'እባክዎን ሽያጭ ከመመዝገብዎ በፊት ከሌጀርዎ ደንበኛ ይምረጡ።')
+      });
+      return;
+    }
+
     const totalAmount = calculateTotal();
     if (totalAmount <= 0) {
-      alert('Please add valid line items with prices.');
+      setRiskFeedback({
+        type: 'REJECTED',
+        message: t('Invalid Line Items', 'ልክ ያልሆኑ የእቃ ዝርዝሮች'),
+        reason: t('Please add valid line items with quantities and unit prices greater than 0.', 'እባክዎን ከ0 በላይ ዋጋ እና ብዛት ያላቸው ትክክለኛ የእቃ ዝርዝሮችን ያክሉ።')
+      });
+      return;
+    }
+
+    if (!dueDate) {
+      setRiskFeedback({
+        type: 'REJECTED',
+        message: t('Repayment Due Date Required', 'የክፍያ መተግበሪያ ቀን ያስፈልጋል'),
+        reason: t('Please specify a repayment deadline date for this credit purchase.', 'እባክዎን ለዚህ የዱቤ ግዢ የክፍያ ገደብ ቀን ይወስኑ።')
+      });
       return;
     }
 
@@ -402,8 +480,8 @@ export const MerchantDashboard = () => {
       if (!res.ok) {
         setRiskFeedback({
           type: 'REJECTED',
-          message: data.error,
-          reason: data.reason
+          message: getErrorMessage(data, 'Credit transaction rejected'),
+          reason: data.reason || (data.details && data.details[0]?.message) || data.message
         });
         return;
       }
@@ -416,7 +494,11 @@ export const MerchantDashboard = () => {
       setSmsFeedback(`Credit purchase logged successfully! Ref: ${data.transaction.txRef}`);
       setTimeout(() => setSmsFeedback(''), 4500);
     } catch (err) {
-      alert(err.message);
+      setRiskFeedback({
+        type: 'REJECTED',
+        message: getErrorMessage(err, 'Failed to log credit purchase'),
+        reason: err.message
+      });
     }
   };
 
@@ -424,6 +506,7 @@ export const MerchantDashboard = () => {
   const handleTriggerSMS = async () => {
     if (!smsTarget) return;
     setSmsSending(true);
+    setSmsError('');
     try {
       const res = await fetch('/api/merchant/sms-reminder', {
         method: 'POST',
@@ -438,10 +521,10 @@ export const MerchantDashboard = () => {
         })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) throw new Error(getErrorMessage(data, 'Failed to send SMS reminder'));
       setSmsSentResult(data);
     } catch (err) {
-      alert(err.message);
+      setSmsError(getErrorMessage(err));
     } finally {
       setSmsSending(false);
     }
@@ -452,6 +535,90 @@ export const MerchantDashboard = () => {
     setSmsType('REMINDER');
     setCustomSmsMessage('');
     setSmsSentResult(null);
+    setSmsError('');
+  };
+
+  const [escalationActionId, setEscalationActionId] = useState(null);
+
+  const handleEscalationAction = async (caseId, action) => {
+    setEscalationActionId(caseId + action);
+    try {
+      const endpoint = action === 'WARNING' ? '/api/merchant/escalations/warning' : '/api/merchant/escalations/court-letter';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ caseId })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(getErrorMessage(data, 'Failed to process escalation'));
+
+      setSmsFeedback(action === 'WARNING'
+        ? t('Warning SMS sent to customer!', 'ማስጠንቀቂያ ለደንበኛ ተልኳል!')
+        : t('Court letter sent to customer!', 'የፍርድ ቤት ደብዳቤ ለደንበኛ ተልኳል!'));
+      setTimeout(() => setSmsFeedback(''), 5000);
+
+      fetchDashboardData();
+    } catch (err) {
+      setSmsFeedback(`⚠️ ${getErrorMessage(err)}`);
+      setTimeout(() => setSmsFeedback(''), 5000);
+    } finally {
+      setEscalationActionId(null);
+    }
+  };
+
+  const handleResolveEscalation = async (caseId) => {
+    setEscalationActionId(caseId + 'RESOLVE');
+    try {
+      const res = await fetch(`/api/merchant/escalations/${caseId}/resolve`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ notes: 'Debt settled by customer' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(getErrorMessage(data, 'Failed to resolve case'));
+
+      setSmsFeedback(t('Escalation case resolved!', 'የማስጠንቀቂያ ጉዳይ ተብቷል!'));
+      setTimeout(() => setSmsFeedback(''), 5000);
+
+      fetchDashboardData();
+    } catch (err) {
+      setSmsFeedback(`⚠️ ${getErrorMessage(err)}`);
+      setTimeout(() => setSmsFeedback(''), 5000);
+    } finally {
+      setEscalationActionId(null);
+    }
+  };
+
+  const handleCloseEscalation = async (caseId) => {
+    setEscalationActionId(caseId + 'CLOSE');
+    try {
+      const res = await fetch(`/api/merchant/escalations/${caseId}/close`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ notes: 'Case closed by merchant' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(getErrorMessage(data, 'Failed to close case'));
+
+      setSmsFeedback(t('Escalation case closed!', 'የማስጠንቀቂያ ጉዳይ ተዘግቷል!'));
+      setTimeout(() => setSmsFeedback(''), 5000);
+
+      fetchDashboardData();
+    } catch (err) {
+      setSmsFeedback(`⚠️ ${getErrorMessage(err)}`);
+      setTimeout(() => setSmsFeedback(''), 5000);
+    } finally {
+      setEscalationActionId(null);
+    }
   };
 
   const getAvatarUrl = (photoUrl, name) => {
@@ -655,7 +822,8 @@ export const MerchantDashboard = () => {
                 {[
                   { id: 'CUSTOMERS', name: t('Customer Ledgers', 'የደንበኞች ሌጀር'), icon: Users, count: customers.length },
                   { id: 'TRANSACTIONS', name: t('Credit History', 'የዱቤ ታሪክ'), icon: FileText, count: transactions.length },
-                  { id: 'RECEIPT_APPROVALS', name: t('Receipt Approvals', 'ደረሰኝ ማጽደቂያ'), icon: Upload, count: repayments.filter(r => r.status === 'PENDING').length }
+                  { id: 'RECEIPT_APPROVALS', name: t('Receipt Approvals', 'ደረሰኝ ማጽደቂያ'), icon: Upload, count: repayments.filter(r => r.status === 'PENDING').length },
+                  { id: 'ESCALATIONS', name: t('Debt Escalations', 'የብድር ማስጠንቀቂያ'), icon: ShieldAlert, count: escalationCases.filter(c => c.status === 'SENT').length }
                 ].map(item => {
                   const isActive = activeTab === item.id;
                   const Icon = item.icon;
@@ -857,17 +1025,28 @@ export const MerchantDashboard = () => {
               </div>
             </div>
 
-            <form onSubmit={handleRegisterCustomer} className="space-y-4">
+            <form noValidate onSubmit={handleRegisterCustomer} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">{t('Full Name:', 'ሙሉ ስም፦')}</label>
                 <input
                   type="text"
                   placeholder="e.g. Dawit Yohannes"
                   value={newCustomer.fullName}
-                  onChange={e => setNewCustomer({ ...newCustomer, fullName: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
-                  required
+                  onChange={e => {
+                    setNewCustomer({ ...newCustomer, fullName: e.target.value });
+                    if (customerRegError) setCustomerRegError('');
+                  }}
+                  className={`w-full bg-slate-900 border ${
+                    customerRegError && (!newCustomer.fullName || !newCustomer.fullName.trim())
+                      ? 'border-red-500 ring-1 ring-red-500/30'
+                      : 'border-slate-800 focus:border-emerald-500'
+                  } rounded-xl px-3.5 py-2.5 text-xs text-slate-100 focus:outline-none transition-colors`}
                 />
+                {customerRegError && (!newCustomer.fullName || !newCustomer.fullName.trim()) && (
+                  <p className="text-[11px] text-red-400 mt-1 font-semibold flex items-center gap-1">
+                    <span>⚠️ {t('Please enter customer full name.', 'እባክዎን የደንበኛ ሙሉ ስም ያስገቡ።')}</span>
+                  </p>
+                )}
               </div>
 
               <div>
@@ -876,10 +1055,21 @@ export const MerchantDashboard = () => {
                   type="text"
                   placeholder="+251911..."
                   value={newCustomer.phone}
-                  onChange={e => setNewCustomer({ ...newCustomer, phone: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-emerald-500"
-                  required
+                  onChange={e => {
+                    setNewCustomer({ ...newCustomer, phone: e.target.value });
+                    if (customerRegError) setCustomerRegError('');
+                  }}
+                  className={`w-full bg-slate-900 border ${
+                    customerRegError && (!newCustomer.phone || newCustomer.phone.trim() === '+251' || !isValidEthiopianPhone(newCustomer.phone))
+                      ? 'border-red-500 ring-1 ring-red-500/30'
+                      : 'border-slate-800 focus:border-emerald-500'
+                  } rounded-xl px-3.5 py-2.5 text-xs text-slate-100 font-mono focus:outline-none transition-colors`}
                 />
+                {customerRegError && (!newCustomer.phone || newCustomer.phone.trim() === '+251' || !isValidEthiopianPhone(newCustomer.phone)) && (
+                  <p className="text-[11px] text-red-400 mt-1 font-semibold flex items-center gap-1">
+                    <span>⚠️ {t('Please enter a valid phone number (e.g. +251911223344 or 0911223344).', 'እባክዎን ትክክለኛ ስልክ ቁጥር ያስገቡ (ምሳሌ +251911223344 ወይም 0911223344)።')}</span>
+                  </p>
+                )}
               </div>
 
               <div>
@@ -888,10 +1078,21 @@ export const MerchantDashboard = () => {
                   type="text"
                   placeholder="FYD-1234-5678"
                   value={newCustomer.faydaId}
-                  onChange={e => setNewCustomer({ ...newCustomer, faydaId: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-emerald-500"
-                  required
+                  onChange={e => {
+                    setNewCustomer({ ...newCustomer, faydaId: e.target.value });
+                    if (customerRegError) setCustomerRegError('');
+                  }}
+                  className={`w-full bg-slate-900 border ${
+                    customerRegError && (!newCustomer.faydaId || newCustomer.faydaId.trim() === 'FYD-' || !newCustomer.faydaId.trim())
+                      ? 'border-red-500 ring-1 ring-red-500/30'
+                      : 'border-slate-800 focus:border-emerald-500'
+                  } rounded-xl px-3.5 py-2.5 text-xs text-slate-100 font-mono focus:outline-none transition-colors`}
                 />
+                {customerRegError && (!newCustomer.faydaId || newCustomer.faydaId.trim() === 'FYD-' || !newCustomer.faydaId.trim()) && (
+                  <p className="text-[11px] text-red-400 mt-1 font-semibold flex items-center gap-1">
+                    <span>⚠️ {t('Fayda ID number is required for KYC compliance (e.g. FYD-1234-5678).', 'የፋይዳ መታወቂያ ቁጥር ለKYC ህግ ያስፈልጋል (ምሳሌ FYD-1234-5678)።')}</span>
+                  </p>
+                )}
               </div>
 
               <div>
@@ -900,18 +1101,46 @@ export const MerchantDashboard = () => {
                   type="number"
                   placeholder="5000"
                   value={newCustomer.creditLimit}
-                  onChange={e => setNewCustomer({ ...newCustomer, creditLimit: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 font-bold focus:outline-none focus:border-emerald-500"
-                  required
+                  onChange={e => {
+                    setNewCustomer({ ...newCustomer, creditLimit: e.target.value });
+                    if (customerRegError) setCustomerRegError('');
+                  }}
+                  className={`w-full bg-slate-900 border ${
+                    customerRegError && (isNaN(parseFloat(newCustomer.creditLimit)) || parseFloat(newCustomer.creditLimit) < 0)
+                      ? 'border-red-500 ring-1 ring-red-500/30'
+                      : 'border-slate-800 focus:border-emerald-500'
+                  } rounded-xl px-3.5 py-2.5 text-xs text-slate-100 font-bold focus:outline-none transition-colors`}
                 />
+                {customerRegError && (isNaN(parseFloat(newCustomer.creditLimit)) || parseFloat(newCustomer.creditLimit) < 0) && (
+                  <p className="text-[11px] text-red-400 mt-1 font-semibold flex items-center gap-1">
+                    <span>⚠️ {t('Credit limit must be a valid number of 0 or more.', 'የዱቤ ገደብ 0 ወይም ከዚያ በላይ ቁጥር መሆን አለበት።')}</span>
+                  </p>
+                )}
               </div>
+
+              {customerRegError && (
+                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-bold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{customerRegError}</span>
+                </div>
+              )}
 
               <button
                 type="submit"
-                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                disabled={customerRegSaving}
+                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
-                <PlusCircle className="w-4 h-4" />
-                <span>{t('Create Customer Profile', 'የደንበኛ መገለጫ ይፍጠሩ')}</span>
+                {customerRegSaving ? (
+                  <span className="flex items-center gap-2">
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    <span>{t('Registering...', 'በመመዝገብ ላይ...')}</span>
+                  </span>
+                ) : (
+                  <>
+                    <PlusCircle className="w-4 h-4" />
+                    <span>{t('Create Customer Profile', 'የደንበኛ መገለጫ ይፍጠሩ')}</span>
+                  </>
+                )}
               </button>
             </form>
           </div>
@@ -946,7 +1175,7 @@ export const MerchantDashboard = () => {
               </div>
             )}
 
-            <form onSubmit={handleLogCredit} className="space-y-4">
+            <form noValidate onSubmit={handleLogCredit} className="space-y-4">
               {/* Customer Select */}
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">{t('Select Customer Profile:', 'የደንበኛ መገለጫ ይምረጡ፦')}</label>
@@ -1065,7 +1294,7 @@ export const MerchantDashboard = () => {
             </div>
 
             {/* Bank Account Details for Customer Payments */}
-            <form onSubmit={saveBankAccount} className="glass-card p-5 rounded-2xl border border-slate-800/80 space-y-4">
+            <form noValidate onSubmit={saveBankAccount} className="glass-card p-5 rounded-2xl border border-slate-800/80 space-y-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono flex items-center gap-2">
@@ -1692,6 +1921,129 @@ export const MerchantDashboard = () => {
           )}
         </div>
       )}
+
+      {/* TAB 5: DEBT ESCALATIONS */}
+      {activeTab === 'ESCALATIONS' && (
+        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-5">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div>
+              <h3 className="text-lg font-extrabold text-slate-100 flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5 text-red-400" />
+                {t('Debt Escalation Management', 'የብድር ማስጠንቀቂያ አስተዳደር')}
+              </h3>
+              <p className="text-xs text-slate-400">{t('Manage overdue debt warnings and court letters', 'የያለፈባቸውን ብድር ማስጠንቀቂያ እና የፍርድ ቤት ደብዳቤዎችን ያስተዳድሩ')}</p>
+            </div>
+
+            {escalationCases.filter(c => c.status === 'SENT').length > 0 && (
+              <span className="px-3 py-1 rounded-full bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-mono font-bold animate-pulse">
+                {escalationCases.filter(c => c.status === 'SENT').length} {t('Active Escalations', 'ንቁ ማስጠንቀቂያዎች')}
+              </span>
+            )}
+          </div>
+
+          {escalationCases.length === 0 ? (
+            <div className="text-center py-10 bg-slate-900/40 rounded-xl border border-slate-800 text-slate-500 text-xs">
+              {t('No escalation cases found. Overdue debts will appear here automatically.', 'ምንም የማስጠንቀቂያ ጉዳይ አልተገኘም። የያለፈባቸው ብድር በራስ-አክል እዚህ ይታያሉ።')}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {escalationCases.map(ec => (
+                <div key={ec.id} className={`bg-slate-900/90 rounded-2xl p-5 border space-y-4 shadow-lg ${
+                  ec.escalation_type === 'COURT_LETTER' ? 'border-red-500/40' : 'border-slate-800'
+                }`}>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h4 className="font-bold text-sm text-slate-100">{ec.customer_name}</h4>
+                      <p className="text-xs text-slate-400 font-mono">{ec.customer_phone}</p>
+                      {ec.transaction_ref && (
+                        <p className="text-[10px] text-slate-500 font-mono mt-0.5">Ref: {ec.transaction_ref}</p>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                        ec.status === 'RESOLVED'
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                          : ec.status === 'CLOSED'
+                          ? 'bg-slate-500/20 text-slate-400 border border-slate-500/30'
+                          : ec.escalation_type === 'COURT_LETTER'
+                          ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                          : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                      }`}>
+                        {ec.status === 'RESOLVED' ? t('RESOLVED', 'ተብቷል') : ec.status === 'CLOSED' ? t('CLOSED', 'ተዘግቷል') : ec.escalation_type === 'COURT_LETTER' ? t('COURT LETTER', 'የፍርድ ቤት ደብዳቤ') : t('WARNING', 'ማስጠንቀቂያ')}
+                      </span>
+                      <span className="text-xs font-bold text-amber-400">{parseFloat(ec.amount).toFixed(2)} ETB</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
+                    <div className="bg-slate-950 p-2 rounded-lg border border-slate-800">
+                      <span className="text-slate-500 text-[10px] block">{t('Due Date', 'መክፈያ ቀን')}</span>
+                      <span className="text-slate-300 font-bold">{ec.due_date ? String(ec.due_date).split('T')[0] : 'N/A'}</span>
+                    </div>
+                    <div className="bg-slate-950 p-2 rounded-lg border border-slate-800">
+                      <span className="text-slate-500 text-[10px] block">{t('Warning Sent', 'ማስጠንቀቂያ ተልኳል')}</span>
+                      <span className="text-slate-300 font-bold">{ec.warning_sent_at ? new Date(ec.warning_sent_at).toLocaleDateString() : 'N/A'}</span>
+                    </div>
+                    <div className="bg-slate-950 p-2 rounded-lg border border-slate-800">
+                      <span className="text-slate-500 text-[10px] block">{t('Court Letter', 'የፍርድ ቤት ደብዳቤ')}</span>
+                      <span className="text-slate-300 font-bold">{ec.court_letter_sent_at ? new Date(ec.court_letter_sent_at).toLocaleDateString() : 'N/A'}</span>
+                    </div>
+                    <div className="bg-slate-950 p-2 rounded-lg border border-slate-800">
+                      <span className="text-slate-500 text-[10px] block">{t('Status', 'ሁኔታ')}</span>
+                      <span className="text-slate-300 font-bold">{ec.status}</span>
+                    </div>
+                  </div>
+
+                  {ec.notes && (
+                    <p className="text-[11px] text-slate-400 italic bg-slate-950/60 p-2 rounded-lg border border-slate-800">
+                      {t('Notes:', 'ማስታወሻዎች፦')} {ec.notes}
+                    </p>
+                  )}
+
+                  {ec.status !== 'RESOLVED' && ec.status !== 'CLOSED' && (
+                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800">
+                      {ec.escalation_type === 'WARNING' && (
+                        <button
+                          onClick={() => handleEscalationAction(ec.id, 'COURT_LETTER')}
+                          disabled={escalationActionId === ec.id + 'COURT_LETTER'}
+                          className="px-3 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/30 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          <ShieldAlert className="w-3.5 h-3.5" />
+                          <span>{escalationActionId === ec.id + 'COURT_LETTER' ? t('Sending...', 'በመላክ ላይ...') : t('Send Court Letter', 'የፍርድ ቤት ደብዳቤ ላክ')}</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleEscalationAction(ec.id, 'WARNING')}
+                        disabled={escalationActionId === ec.id + 'WARNING'}
+                        className="px-3 py-2 rounded-xl bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 border border-amber-500/30 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span>{escalationActionId === ec.id + 'WARNING' ? t('Sending...', 'በመላክ ላይ...') : t('Resend Warning', 'ማስጠንቀቂያ እንደገና ላክ')}</span>
+                      </button>
+                      <button
+                        onClick={() => handleResolveEscalation(ec.id)}
+                        disabled={escalationActionId === ec.id + 'RESOLVE'}
+                        className="px-3 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        <span>{t('Mark Resolved', 'ተብቷል ምልክት አድርግ')}</span>
+                      </button>
+                      <button
+                        onClick={() => handleCloseEscalation(ec.id)}
+                        disabled={escalationActionId === ec.id + 'CLOSE'}
+                        className="px-3 py-2 rounded-xl bg-slate-600/20 hover:bg-slate-600/30 text-slate-400 border border-slate-500/30 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        <span>{t('Close Case', 'ጉዳይ ዝጋ')}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       </div> {/* right main content end */}
       </div> {/* outer sidebar grid wrapper end */}
 
@@ -1837,6 +2189,13 @@ export const MerchantDashboard = () => {
 
                   {/* Send Action Options: Direct Native Phone SMS & Gateway Bulk SMS */}
                   <div className="space-y-2 pt-1">
+                    {smsError && (
+                      <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-bold flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                        <span>{smsError}</span>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-2 gap-2">
                       {/* 1. Direct Native Phone SMS app link */}
                       <a

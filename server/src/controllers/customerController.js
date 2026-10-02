@@ -1,5 +1,6 @@
 const db = require('../config/database');
 const { processRepayment, processMultiMerchantRepayment } = require('../services/paymentGatewayService');
+const { getCustomerNotices } = require('../services/escalationService');
 
 // pg hands back DATE columns as a Date at local midnight, so calling toISOString()
 // would roll the calendar day back for users east of UTC. Read the local parts instead.
@@ -44,7 +45,8 @@ async function getCustomerDashboard(req, res) {
         availableCredit: 0.00,
         profiles: [],
         pendingTransactions: [],
-        repayments: []
+        repayments: [],
+        notices: []
       });
     }
 
@@ -124,6 +126,16 @@ async function getCustomerDashboard(req, res) {
     }
     const activeSchedule = activeSchedules.length > 0 ? activeSchedules[0] : null;
 
+    // Court letters issued against this customer's ledgers. Fetched separately
+    // from sms_notifications because the full legal notice is far longer than an
+    // SMS, and a missing escalation table must not take the whole dashboard down.
+    let notices = [];
+    try {
+      notices = await getCustomerNotices(profileIds);
+    } catch (noticeErr) {
+      console.error('Customer notices error:', noticeErr.message);
+    }
+
     res.json({
       summary: {
         totalBalance,
@@ -135,6 +147,7 @@ async function getCustomerDashboard(req, res) {
       transactions: formattedTx,
       repayments,
       notifications,
+      notices,
       activeSchedule,
       activeSchedules
     });
@@ -249,7 +262,7 @@ async function calculateFlexibleInstallments(userId, totalAmount, frequency, _un
     cp = await db.get(`
       SELECT cp.id FROM customer_profiles cp
       JOIN credit_transactions ct ON ct.customer_id = cp.id
-      WHERE (cp.user_id = $1 OR cp.phone = (SELECT phone FROM users WHERE id = $1)) AND ct.status IN ('PENDING', 'PARTIALLY_PAID')
+      WHERE (cp.user_id = $1 OR cp.phone = (SELECT phone FROM users WHERE id = $1)) AND ct.status IN ('PENDING', 'PARTIALLY_PAID', 'OVERDUE')
       ORDER BY cp.current_balance DESC LIMIT 1
     `, [userId]);
   }
@@ -261,7 +274,7 @@ async function calculateFlexibleInstallments(userId, totalAmount, frequency, _un
   if ((!deadlineDate || isNaN(deadlineDate.getTime())) && cp) {
     const tx = await db.get(`
       SELECT due_date FROM credit_transactions
-      WHERE customer_id = $1 AND status IN ('PENDING', 'PARTIALLY_PAID') AND due_date IS NOT NULL
+      WHERE customer_id = $1 AND status IN ('PENDING', 'PARTIALLY_PAID', 'OVERDUE') AND due_date IS NOT NULL
       ORDER BY (CASE WHEN ABS(total_amount - $2) < 0.01 THEN 0 ELSE 1 END), due_date DESC LIMIT 1
     `, [cp.id, amount]);
     if (tx && tx.due_date) {

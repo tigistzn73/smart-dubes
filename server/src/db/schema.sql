@@ -10,13 +10,36 @@ CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     full_name VARCHAR(200) NOT NULL,
     phone VARCHAR(20) UNIQUE NOT NULL,
-    email VARCHAR(200),
+    -- Mandatory, not optional. The email is the channel the password-reset OTP is
+    -- delivered to, so an account without one is an account its owner can never
+    -- recover: they would be locked out permanently after forgetting the
+    -- password. Uniqueness is enforced case-insensitively by
+    -- idx_users_email_unique below, since Gmail treats Foo@x.com and
+    -- foo@x.com as one mailbox.
+    email VARCHAR(200) NOT NULL,
     role VARCHAR(20) NOT NULL CHECK (role IN ('ADMIN', 'MERCHANT', 'CUSTOMER')),
     password_hash TEXT NOT NULL,
     fayda_id VARCHAR(50),
     photo_url TEXT,
-    reset_token VARCHAR(10),
+    -- Holds a bcrypt hash of the 6-digit reset code, not the code itself, so a
+    -- dump of this table yields no usable reset codes. 60 chars fits
+    -- bcrypt's output; VARCHAR(10) only ever fitted the plaintext PIN.
+    reset_token VARCHAR(72),
     reset_token_expires TIMESTAMPTZ,
+    -- When the current code was emailed. The resend cooldown is enforced
+    -- against this column rather than against a process-local Map: an
+    -- in-memory timer is erased by a deploy, which makes restarting the app a
+    -- way around the limit, and each replica behind a load balancer would
+    -- otherwise enforce its own separate window.
+    reset_token_sent_at TIMESTAMPTZ,
+    -- Wrong OTP codes submitted against reset_token. The token is destroyed
+    -- once this hits MAX so a 6-digit code cannot be brute-forced.
+    reset_token_attempts INT NOT NULL DEFAULT 0,
+    -- Consecutive failed logins. Kept in the database rather than in process
+    -- memory so the lockout survives a restart and is shared by every replica.
+    failed_login_attempts INT NOT NULL DEFAULT 0,
+    -- Set when failed_login_attempts trips the limit. NULL means not locked.
+    locked_until TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -87,8 +110,9 @@ CREATE TABLE IF NOT EXISTS sms_notifications (
     customer_id INT REFERENCES customer_profiles(id) ON DELETE SET NULL,
     phone VARCHAR(20) NOT NULL,
     message TEXT NOT NULL,
-    type VARCHAR(30) NOT NULL CHECK (type IN ('CREDIT_ISSUED', 'REMINDER', 'OVERDUE_ALERT', 'PAYMENT_RECEIPT')),
-    status VARCHAR(20) NOT NULL DEFAULT 'SIMULATED' CHECK (status IN ('SIMULATED', 'DELIVERED', 'FAILED')),
+    type VARCHAR(30) NOT NULL CHECK (type IN ('CREDIT_ISSUED', 'REMINDER', 'OVERDUE_ALERT', 'PAYMENT_RECEIPT', 'COURT_LETTER')),
+status VARCHAR(20) NOT NULL DEFAULT 'SIMULATED' CHECK (status IN ('PENDING', 'SIMULATED', 'DELIVERED', 
+'FAILED')),
     sent_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -129,3 +153,45 @@ CREATE TABLE IF NOT EXISTS customer_schedules (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 10. escalation_cases
+-- Debt escalation ladder: a Dube that passes due_date opens a case, the case
+-- gets a WARNING, and if it is still unpaid WARNING_PERIOD_DAYS later it is
+-- escalated to a COURT_LETTER. court_letter_body / court_letter_ref are a
+-- snapshot written once when the letter is issued, so the legal notice the
+-- customer was shown cannot change if the store or amount is later edited.
+CREATE TABLE IF NOT EXISTS escalation_cases (
+    id SERIAL PRIMARY KEY,
+    customer_id INT NOT NULL REFERENCES customer_profiles(id) ON DELETE CASCADE,
+    merchant_id INT NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
+    transaction_id INT REFERENCES credit_transactions(id) ON DELETE SET NULL,
+    escalation_type VARCHAR(20) NOT NULL CHECK (escalation_type IN ('WARNING', 'COURT_LETTER')),
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'SENT', 'RESPONDED', 'RESOLVED', 'CLOSED')),
+    amount DECIMAL(12, 2) NOT NULL,
+    due_date DATE NOT NULL,
+    warning_period_days INT NOT NULL DEFAULT 7,
+    warning_sent_at TIMESTAMPTZ,
+    court_letter_ref VARCHAR(60),
+    court_letter_body TEXT,
+    -- The structured form of the same letter: the exact fields the PNG renderer
+    -- draws. Stored alongside court_letter_body so the image served to Twilio and
+    -- the image shown on the portal can never disagree with the text snapshot,
+    -- even if the store name, address or customer phone is edited later.
+    court_letter_doc JSONB,
+    court_letter_sent_at TIMESTAMPTZ,
+    resolved_at TIMESTAMPTZ,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_escalation_cases_customer ON escalation_cases(customer_id);
+CREATE INDEX IF NOT EXISTS idx_escalation_cases_merchant ON escalation_cases(merchant_id);
+CREATE INDEX IF NOT EXISTS idx_escalation_cases_status ON escalation_cases(status);
+CREATE INDEX IF NOT EXISTS idx_credit_transactions_due ON credit_transactions(due_date, status);
+
+-- Email is the OTP recovery channel, so it must identify exactly one account.
+-- Indexed on lower(email) rather than declared UNIQUE in the table so the rule
+-- survives rows stored with mixed case. Deduplication runs before this in
+-- migrate_email_required.js.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique ON users (lower(email));

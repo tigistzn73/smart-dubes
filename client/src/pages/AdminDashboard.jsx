@@ -20,8 +20,10 @@ import {
   LayoutDashboard,
   Menu,
   Maximize2,
-  Minimize2
+  Minimize2,
+  AlertCircle
 } from 'lucide-react';
+import { getErrorMessage } from '../utils/errorHelper';
 
 export const AdminDashboard = () => {
   const { user } = useAuth();
@@ -80,6 +82,7 @@ export const AdminDashboard = () => {
   // Webhook Test Form
   const [testGateway, setTestGateway] = useState('TELEBIRR');
   const [webhookMessage, setWebhookMessage] = useState('');
+  const [adminError, setAdminError] = useState('');
 
   const token = localStorage.getItem('smart_dube_token');
 
@@ -116,12 +119,13 @@ export const AdminDashboard = () => {
       const reason = prompt('Please enter the rejection reason:');
       if (reason === null) return; // Cancelled
       if (!reason.trim()) {
-        alert('Rejection reason is required.');
+        setAdminError(t('Rejection reason is required.', 'ውድቅ የተደረገበት ምክንያት ያስፈልጋል።'));
         return;
       }
       notes = reason.trim();
     }
 
+    setAdminError('');
     try {
       const res = await fetch(`/api/admin/kyc/${merchantId}`, {
         method: 'PUT',
@@ -132,15 +136,16 @@ export const AdminDashboard = () => {
         body: JSON.stringify({ status, notes })
       });
       const resData = await res.json();
-      if (!res.ok) throw new Error(resData.error);
+      if (!res.ok) throw new Error(getErrorMessage(resData, 'Failed to update KYC status'));
 
       fetchAdminData();
     } catch (err) {
-      alert(err.message);
+      setAdminError(getErrorMessage(err));
     }
   };
 
   const handleTriggerWebhook = async () => {
+    setAdminError('');
     try {
       const res = await fetch('/api/admin/webhook-test', {
         method: 'POST',
@@ -154,11 +159,12 @@ export const AdminDashboard = () => {
         })
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(getErrorMessage(data, 'Webhook simulation failed'));
       setWebhookMessage(`Simulated ${testGateway} Webhook event dispatched!`);
       setTimeout(() => setWebhookMessage(''), 4000);
       fetchAdminData();
     } catch (err) {
-      alert(err.message);
+      setAdminError(getErrorMessage(err));
     }
   };
 
@@ -400,6 +406,18 @@ export const AdminDashboard = () => {
               </div>
             </div>
           </div>
+
+          {adminError && (
+            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-bold flex items-center justify-between gap-2 animate-fade-in">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{adminError}</span>
+              </div>
+              <button onClick={() => setAdminError('')} className="text-red-400 hover:text-white text-xs font-bold px-2 py-0.5 rounded cursor-pointer">
+                ✕
+              </button>
+            </div>
+          )}
 
           {activeTab === 'DASHBOARD' && (
             <div className="space-y-6">

@@ -15,6 +15,7 @@ import {
   Minimize2,
   Maximize2
 } from 'lucide-react';
+import { getErrorMessage } from '../utils/errorHelper';
 
 export const SettingsModal = ({ isOpen, onClose }) => {
   const { user } = useAuth();
@@ -38,35 +39,50 @@ export const SettingsModal = ({ isOpen, onClose }) => {
     e.preventDefault();
     setMessage(null);
 
+    if (!passwordForm.currentPassword) {
+      setMessage({ type: 'ERROR', text: 'Current password is required.' });
+      return;
+    }
+
+    if (!passwordForm.newPassword || passwordForm.newPassword.length < 6) {
+      setMessage({ type: 'ERROR', text: 'New password must be at least 6 characters.' });
+      return;
+    }
+
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
       setMessage({ type: 'ERROR', text: 'New passwords do not match.' });
       return;
     }
 
-    if (passwordForm.newPassword.length < 6) {
-      setMessage({ type: 'ERROR', text: 'New password must be at least 6 characters.' });
+    if (passwordForm.newPassword === passwordForm.currentPassword) {
+      setMessage({ type: 'ERROR', text: 'New password must be different from the current one.' });
       return;
     }
 
     setLoading(true);
     try {
-      // Endpoint to reset/update password
-      const res = await fetch('/api/auth/reset-password', {
+      // Someone already signed in changes their own password by proving the
+      // current one. This used to POST to /reset-password with the current
+      // password in the OTP field, which can never match a stored reset code,
+      // so in-app password changes always failed with "Invalid OTP code".
+      const res = await fetch('/api/auth/change-password', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('smart_dube_token')}`
+        },
         body: JSON.stringify({
-          phone: user.phone,
-          otpCode: passwordForm.currentPassword, // Or direct update
+          currentPassword: passwordForm.currentPassword,
           newPassword: passwordForm.newPassword
         })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to update password.');
+      if (!res.ok) throw new Error(getErrorMessage(data, 'Failed to update password.'));
 
       setMessage({ type: 'SUCCESS', text: 'Password updated successfully!' });
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
     } catch (err) {
-      setMessage({ type: 'ERROR', text: err.message });
+      setMessage({ type: 'ERROR', text: getErrorMessage(err) });
     } finally {
       setLoading(false);
     }
@@ -241,7 +257,7 @@ export const SettingsModal = ({ isOpen, onClose }) => {
 
         {/* Tab 2: Security */}
         {activeTab === 'SECURITY' && (
-          <form onSubmit={handlePasswordChange} className="space-y-4 text-xs">
+          <form noValidate onSubmit={handlePasswordChange} className="space-y-4 text-xs">
             <div>
               <label className="block text-slate-300 font-semibold mb-1">New Password:</label>
               <input

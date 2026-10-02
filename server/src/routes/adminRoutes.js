@@ -5,7 +5,8 @@ const {
   verifyMerchantKYC,
   getPaymentGatewayDiagnostics,
   triggerSimulatedWebhook,
-  fetchAuditLogs
+  fetchAuditLogs,
+  runEscalationSweepNow
 } = require('../controllers/adminController');
 const { authenticateToken, authorizeRoles } = require('../middleware/auth');
 const { validateResult } = require('../middleware/validate');
@@ -19,6 +20,7 @@ router.get('/dashboard', getAdminDashboard);
 router.put('/kyc/:merchantId', verifyMerchantKYC);
 router.get('/gateways', getPaymentGatewayDiagnostics);
 router.post('/webhook-test', triggerSimulatedWebhook);
+router.post('/escalations/run', runEscalationSweepNow);
 router.get('/audit-logs', fetchAuditLogs);
 
 module.exports = router;

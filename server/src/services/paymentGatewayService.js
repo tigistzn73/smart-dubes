@@ -1,6 +1,17 @@
 const db = require('../config/database');
 const { sendSMS, getTemplate } = require('./smsService');
 const { logAudit } = require('./auditService');
+const { resolveCasesForSettledTransactions } = require('./escalationService');
+
+// Clearing any open warning or court letter is bookkeeping on top of a
+// successful payment, so it must never be able to fail the payment itself.
+async function settleEscalations(transactionIds) {
+  try {
+    await resolveCasesForSettledTransactions(transactionIds);
+  } catch (err) {
+    console.error('[ESCALATION] Could not auto-resolve escalation cases:', err.message);
+  }
+}
 
 /**
  * Process a repayment transaction from Telebirr, Chapa, or CBE Birr
@@ -120,7 +131,7 @@ async function processRepayment({ transactionId, customerId, amount, gateway, re
       const currentDate = new Date().toISOString().split('T')[0];
       const countRes = await client.query(`
         SELECT COUNT(*) as count FROM credit_transactions 
-        WHERE customer_id = $1 AND id != $2 AND status IN ('PENDING', 'PARTIALLY_PAID') AND due_date < $3
+        WHERE customer_id = $1 AND id != $2 AND status IN ('PENDING', 'PARTIALLY_PAID', 'OVERDUE') AND due_date < $3
       `, [customerId, transactionId, currentDate]);
       const remainingOverdue = parseInt(countRes.rows[0].count || 0);
 
@@ -188,6 +199,12 @@ async function processRepayment({ transactionId, customerId, amount, gateway, re
       remainingBalance: result.newBalance.toFixed(2)
     });
     sendSMS({ customerId, phone: customer.phone, message: smsMessage, type: 'PAYMENT_RECEIPT' });
+
+    // The debt is gone, so any warning or court letter standing against it must
+    // stop showing on the customer's page without waiting for the merchant.
+    if (result.txStatus === 'SETTLED') {
+      settleEscalations([transactionId]);
+    }
 
     // Notify ALL merchants who have an active credit profile for this customer
     // so every merchant ledger (e.g. Arda and Zemer) receives the payment receipt
@@ -273,7 +290,7 @@ async function approveUploadedReceipt({ repaymentId, action, merchantUserId, act
       const currentDate = new Date().toISOString().split('T')[0];
       const countRes = await client.query(`
         SELECT COUNT(*) as count FROM credit_transactions 
-        WHERE customer_id = $1 AND id != $2 AND status IN ('PENDING', 'PARTIALLY_PAID') AND due_date < $3
+        WHERE customer_id = $1 AND id != $2 AND status IN ('PENDING', 'PARTIALLY_PAID', 'OVERDUE') AND due_date < $3
       `, [customer.id, transaction ? transaction.id : 0, currentDate]);
       const remainingOverdue = parseInt(countRes.rows[0].count || 0);
 
@@ -314,6 +331,11 @@ async function approveUploadedReceipt({ repaymentId, action, merchantUserId, act
   // Send Payment Successful SMS Notification
   const smsMsg = `[Smart Dube] Payment Receipt Approved! Your payment of ${approvalResult.amount.toFixed(2)} ETB via Receipt Upload has been verified and approved by ${merchant.store_name}. Ref: ${repayment.reference_code}. Remaining Dube Balance: ${approvalResult.newBalance.toFixed(2)} ETB.`;
   sendSMS({ customerId: customer.id, phone: customer.phone, message: smsMsg, type: 'PAYMENT_RECEIPT' });
+
+  // An approved receipt can be the payment that finally clears an escalated debt.
+  if (transaction && approvalResult.txStatus === 'SETTLED') {
+    settleEscalations([transaction.id]);
+  }
 
   // Audit Log
   logAudit({
@@ -416,6 +438,7 @@ async function processMultiMerchantRepayment({ userId, userPhone, amount, gatewa
 
   const initialStatus = isReceiptUpload ? 'PENDING' : 'COMPLETED';
   const masterRepaymentRef = `PAY-MULTI-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+  const settledTransactionIds = [];
 
   const executionResults = await db.transaction(async (client) => {
     const results = [];
@@ -426,7 +449,7 @@ async function processMultiMerchantRepayment({ userId, userPhone, amount, gatewa
 
       let targetTx = (await client.query(`
         SELECT * FROM credit_transactions
-        WHERE customer_id = $1 AND status IN ('PENDING', 'PARTIALLY_PAID')
+        WHERE customer_id = $1 AND status IN ('PENDING', 'PARTIALLY_PAID', 'OVERDUE')
         ORDER BY created_at ASC LIMIT 1
       `, [profile.id])).rows[0];
 
@@ -456,6 +479,7 @@ async function processMultiMerchantRepayment({ userId, userPhone, amount, gatewa
           const repSum = parseFloat(sumRes.rows[0].total || 0);
           let txStatus = repSum >= parseFloat(targetTx.total_amount) ? 'SETTLED' : 'PARTIALLY_PAID';
           await client.query(`UPDATE credit_transactions SET status = $1 WHERE id = $2`, [txStatus, targetTx.id]);
+          if (txStatus === 'SETTLED') settledTransactionIds.push(targetTx.id);
         }
       }
 
@@ -519,6 +543,11 @@ async function processMultiMerchantRepayment({ userId, userPhone, amount, gatewa
     resource: `Master Repayment #${masterRepaymentRef}`,
     details: { totalAmount: totalPay, gateway, cleanRef, allocations: executionResults }
   });
+
+  // A single multi-store payment can clear debts at several shops at once.
+  if (settledTransactionIds.length > 0) {
+    settleEscalations(settledTransactionIds);
+  }
 
   return {
     isMultiMerchant: true,

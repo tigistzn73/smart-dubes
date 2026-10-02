@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import {
@@ -121,6 +121,7 @@ function rememberPhone(value) {
     // Same reasoning as above: a storage failure must not break sign-in.
   }
 }
+import { getErrorMessage, isValidEthiopianPhone } from '../utils/errorHelper';
 
 export const Login = () => {
   const { loginWithToken, switchDemoRole, register, forgotPassword, resetPassword } = useAuth();
@@ -172,7 +173,13 @@ export const Login = () => {
 
   // Forgot Password State
   const [forgotPhone, setForgotPhone] = useState('+251');
+  // Set only when the server reports that delivery is simulated, i.e. nothing
+  // actually left the machine. With real email/SMS configured the code is
+  // never available to the browser and has to be typed from the message.
   const [demoOTP, setDemoOTP] = useState('');
+  const [codeDestination, setCodeDestination] = useState('');
+  const [codeChannel, setCodeChannel] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   // Reset Password State
   const [resetPhone, setResetPhone] = useState('');
@@ -186,11 +193,24 @@ export const Login = () => {
     setLoading(true);
     setError('');
 
+    const trimmedPhone = (phone || '').trim();
+    if (!trimmedPhone) {
+      setError(t('Phone number is required.', 'የስልክ ቁጥር ያስፈልጋል።'));
+      setLoading(false);
+      return;
+    }
+
+    if (!password) {
+      setError(t('Password is required.', 'የይለፍ ቃል ያስፈልጋል።'));
+      setLoading(false);
+      return;
+    }
+
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, password })
+        body: JSON.stringify({ phone: trimmedPhone, password })
       });
       
       let data = {};
@@ -200,7 +220,7 @@ export const Login = () => {
         throw new Error('Unable to connect to Smart Dube backend server. Please verify the server is active.');
       }
       
-      if (!res.ok) throw new Error(data.error || 'Login failed. Please check your credentials.');
+      if (!res.ok) throw new Error(getErrorMessage(data, 'Login failed. Please check your credentials.'));
       // Only when the user asked for it, and only after the credentials are
       // accepted, so a typo is not saved and re-offered next time. The server's
       // canonical form is used rather than the raw input, so the stored value is
@@ -208,7 +228,7 @@ export const Login = () => {
       if (rememberPhoneOptIn) rememberPhone(data.user?.phone || phone);
       loginWithToken(data.token, data.user);
     } catch (err) {
-      setError(err.message);
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -236,34 +256,65 @@ export const Login = () => {
     setError('');
     setSuccess('');
 
+    if (!regForm.fullName || !regForm.fullName.trim()) {
+      setError('Full name is required.');
+      setLoading(false);
+      return;
+    }
+
+    const trimmedPhone = (regForm.phone || '').trim();
+    if (!trimmedPhone || trimmedPhone === '+251') {
+      setError('Phone number is required.');
+      setLoading(false);
+      return;
+    }
+
+    if (!isValidEthiopianPhone(trimmedPhone)) {
+      setError('Please enter a valid Ethiopian phone number (e.g. +251911223344 or 0911223344).');
+      setLoading(false);
+      return;
+    }
+
+    if (!regForm.password || regForm.password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      setLoading(false);
+      return;
+    }
+
+    if (!regForm.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(regForm.email.trim())) {
+      setError('A valid email address is required.');
+      setLoading(false);
+      return;
+    }
+
     if (regForm.password !== regForm.confirmPassword) {
       setError('Passwords do not match.');
       setLoading(false);
       return;
     }
 
-    if (regForm.password.length < 6) {
-      setError('Password must be at least 6 characters.');
+    if (regForm.role === 'MERCHANT' && (!regForm.storeName || !regForm.storeName.trim())) {
+      setError('Store name is required for merchant registration.');
       setLoading(false);
       return;
     }
 
     try {
       await register({
-        fullName: regForm.fullName,
-        phone: regForm.phone,
-        email: regForm.email || undefined,
+        fullName: regForm.fullName.trim(),
+        phone: trimmedPhone,
+        email: (regForm.email || '').trim(),
         role: regForm.role,
         password: regForm.password,
-        faydaId: regForm.faydaId,
-        storeName: regForm.role === 'MERCHANT' ? (regForm.storeName || undefined) : undefined,
-        businessLicenseNo: regForm.role === 'MERCHANT' ? (regForm.businessLicenseNo || undefined) : undefined,
-        address: regForm.role === 'MERCHANT' ? (regForm.address || undefined) : undefined,
+        faydaId: regForm.faydaId?.trim() || undefined,
+        storeName: regForm.role === 'MERCHANT' ? (regForm.storeName?.trim() || undefined) : undefined,
+        businessLicenseNo: regForm.role === 'MERCHANT' ? (regForm.businessLicenseNo?.trim() || undefined) : undefined,
+        address: regForm.role === 'MERCHANT' ? (regForm.address?.trim() || undefined) : undefined,
         photoUrl: regForm.role === 'CUSTOMER' ? (regForm.photoUrl || undefined) : undefined
       });
       
       setSuccess('Registration successful! Redirecting to sign in...');
-      setPhone(regForm.phone);
+      setPhone(trimmedPhone);
       setPassword('');
       
       setTimeout(() => {
@@ -271,33 +322,75 @@ export const Login = () => {
         setSuccess('');
       }, 2500);
     } catch (err) {
-      setError(err.message);
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
   };
 
   // ========== FORGOT PASSWORD ==========
+  // Counts the resend cooldown down to zero once a code has been requested.
+  useEffect(() => {
+    if (resendCooldown <= 0) return undefined;
+    const timer = setTimeout(() => setResendCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
+
+  const requestResetCode = async (phoneNumber) => {
+    const data = await forgotPassword(phoneNumber);
+
+    setSuccess(data.message || 'A verification code has been sent.');
+    // Populated only when the server reports delivery is simulated, i.e.
+    // nothing actually left the machine.
+    setDemoOTP(data._demoOTP || '');
+    setCodeDestination(data.destination || '');
+    setCodeChannel(data.channel || '');
+    setResetPhone(phoneNumber);
+    setOtpCode('');
+    setNewPassword('');
+    setConfirmNewPassword('');
+    setResendCooldown(60);
+    setAuthView('RESET_PASSWORD');
+    setError('');
+  };
+
   const handleForgotPassword = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     setDemoOTP('');
 
+    const trimmedPhone = (forgotPhone || '').trim();
+    if (!trimmedPhone || trimmedPhone === '+251') {
+      setError('Registered phone number is required.');
+      setLoading(false);
+      return;
+    }
+
+    if (!isValidEthiopianPhone(trimmedPhone)) {
+      setError('Please enter a valid Ethiopian phone number (e.g. +251911223344 or 0911223344).');
+      setLoading(false);
+      return;
+    }
+
     try {
-      const data = await forgotPassword(forgotPhone);
-      setSuccess(data.message);
-      setDemoOTP(data._demoOTP || '');
-      // Auto-fill reset form
-      setResetPhone(forgotPhone);
-      setOtpCode(data._demoOTP || '');
-      // Switch to reset view after 2s
-      setTimeout(() => {
-        setAuthView('RESET_PASSWORD');
-        setSuccess('');
-      }, 2500);
+      await requestResetCode(trimmedPhone);
     } catch (err) {
-      setError(err.message);
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    if (resendCooldown > 0 || loading) return;
+
+    setLoading(true);
+    setError('');
+    try {
+      await requestResetCode(resetPhone.trim());
+    } catch (err) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -309,22 +402,42 @@ export const Login = () => {
     setLoading(true);
     setError('');
 
+    const trimmedPhone = (resetPhone || '').trim();
+    if (!trimmedPhone || trimmedPhone === '+251') {
+      setError('Phone number is required.');
+      setLoading(false);
+      return;
+    }
+
+    if (!isValidEthiopianPhone(trimmedPhone)) {
+      setError('Please enter a valid Ethiopian phone number (e.g. +251911223344 or 0911223344).');
+      setLoading(false);
+      return;
+    }
+
+    const cleanOtp = (otpCode || '').trim();
+    if (!cleanOtp || cleanOtp.length !== 6) {
+      setError('Please enter the full 6-digit OTP verification PIN.');
+      setLoading(false);
+      return;
+    }
+
+    if (!newPassword || newPassword.length < 6) {
+      setError('New password must be at least 6 characters.');
+      setLoading(false);
+      return;
+    }
+
     if (newPassword !== confirmNewPassword) {
       setError('Passwords do not match.');
       setLoading(false);
       return;
     }
 
-    if (newPassword.length < 6) {
-      setError('New password must be at least 6 characters.');
-      setLoading(false);
-      return;
-    }
-
     try {
-      await resetPassword(resetPhone, otpCode, newPassword);
+      await resetPassword(trimmedPhone, cleanOtp, newPassword);
     } catch (err) {
-      setError(err.message);
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -333,14 +446,19 @@ export const Login = () => {
   // Clear messages on view switch
   const switchView = (view) => {
     setAuthView(view);
-    setError('');
-    setSuccess('');
-    setDemoOTP('');
-    // Dropping the typed password when leaving sign-in keeps it off the screen
-    // while the register or reset form is shown, and means returning to sign-in
-    // gives an empty box rather than the previous attempt still sitting there.
-    setPassword('');
-  };
+setError('');
+      setSuccess('');
+      setDemoOTP('');
+      setCodeDestination('');
+      setCodeChannel('');
+      // Returning to the request form means the pending code is abandoned, so
+      // clear the code box rather than leaving a stale one behind.
+      if (view !== 'RESET_PASSWORD') setOtpCode('');
+      // Dropping the typed password when leaving sign-in keeps it off the screen
+      // while the register or reset form is shown, and means returning to sign-in
+      // gives an empty box rather than the previous attempt still sitting there.
+      setPassword('');
+    };
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center py-4 px-4 overflow-hidden">
@@ -381,7 +499,7 @@ export const Login = () => {
               <p className="text-[11px] text-slate-400">{t('JWT-authenticated secure login with bcrypt password verification', 'በJWT የተረጋገጠ ደህንነቱ የተጠበቀ መግቢያ')}</p>
             </div>
 
-            <form onSubmit={handleSignIn} className="space-y-3">
+            <form noValidate onSubmit={handleSignIn} className="space-y-3">
               <div>
                 <label className="block text-[11px] font-bold text-slate-200 mb-1">{t('Phone Number (+251):', 'የስልክ ቁጥር (+251)፦')}</label>
                 <div className="relative">
@@ -480,7 +598,7 @@ export const Login = () => {
               <p className="text-xs text-slate-400">Register as a Merchant or Customer with Fayda KYC</p>
             </div>
 
-            <form onSubmit={handleRegister} className="space-y-4" autoComplete="off">
+            <form noValidate onSubmit={handleRegister} className="space-y-4">
               {/* Role Selector */}
               <div>
                 <label className="block text-xs font-bold text-slate-200 mb-2">Account Type:</label>
@@ -511,8 +629,6 @@ export const Login = () => {
                 <label className="block text-xs font-semibold text-slate-300 mb-1">Full Name:</label>
                 <input
                   type="text"
-                  name="fullName"
-                  autoComplete="name"
                   placeholder="e.g. Abebe Bikila"
                   value={regForm.fullName}
                   onChange={e => setRegForm({ ...regForm, fullName: e.target.value })}
@@ -528,8 +644,6 @@ export const Login = () => {
                   <Phone className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
                   <input
                     type="text"
-                    name="phone"
-                    autoComplete="tel"
                     placeholder="+251911..."
                     value={regForm.phone}
                     onChange={e => setRegForm({ ...regForm, phone: e.target.value })}
@@ -542,23 +656,17 @@ export const Login = () => {
               {/* Email */}
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Email Address:
+                  Email Address: <span className="text-rose-400">*</span>
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
-                  {/* autoComplete="off" keeps the field empty so the placeholder is all
-                      that shows. Without a name/autocomplete pair the browser has no
-                      way to tell which box a saved phone number belongs in, and was
-                      filling one into this email field. Marking the phone input
-                      autoComplete="tel" above gives it somewhere correct to go. */}
                   <input
                     type="email"
-                    name="email"
-                    autoComplete="off"
-                    placeholder="email@example.com"
+                    placeholder="email@example.com" 
                     value={regForm.email}
                     onChange={e => setRegForm({ ...regForm, email: e.target.value })}
                     className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-sky-500"
+                    required
                   />
                 </div>
               </div>
@@ -574,8 +682,6 @@ export const Login = () => {
                 <input
                   type="text"
                   placeholder="FYD-1234-5678-90"
-                  name="faydaId"
-                  autoComplete="off"
                   value={regForm.faydaId}
                   onChange={e => setRegForm({ ...regForm, faydaId: e.target.value })}
                   className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-sky-500"
@@ -593,8 +699,6 @@ export const Login = () => {
                       <input
                         type="text"
                         placeholder="e.g. Arada Neighborhood Supermarket"
-                    name="storeName"
-                    autoComplete="organization"
                         value={regForm.storeName}
                         onChange={e => setRegForm({ ...regForm, storeName: e.target.value })}
                         className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
@@ -608,8 +712,6 @@ export const Login = () => {
                       <input
                         type="text"
                         placeholder="e.g. BL-ADDIS-2025-0001"
-                        name="businessLicenseNo"
-                        autoComplete="off"
                         value={regForm.businessLicenseNo}
                         onChange={e => setRegForm({ ...regForm, businessLicenseNo: e.target.value })}
                         className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-emerald-500"
@@ -623,8 +725,6 @@ export const Login = () => {
                       <input
                         type="text"
                         placeholder="e.g. Bole Sub-city, Addis Ababa"
-                      name="address"
-                      autoComplete="street-address"
                         value={regForm.address}
                         onChange={e => setRegForm({ ...regForm, address: e.target.value })}
                         className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
@@ -684,8 +784,6 @@ export const Login = () => {
                     <input
                       type={showRegPassword ? 'text' : 'password'}
                       placeholder="Min 6 characters"
-                      name="password"
-                      autoComplete="new-password"
                       value={regForm.password}
                       onChange={e => setRegForm({ ...regForm, password: e.target.value })}
                       className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-10 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-sky-500"
@@ -707,8 +805,6 @@ export const Login = () => {
                     <input
                       type={showRegPassword ? 'text' : 'password'}
                       placeholder="Repeat password"
-                      name="confirmPassword"
-                      autoComplete="new-password"
                       value={regForm.confirmPassword}
                       onChange={e => setRegForm({ ...regForm, confirmPassword: e.target.value })}
                       className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-sky-500"
@@ -754,25 +850,15 @@ export const Login = () => {
                 <KeyRound className="w-5 h-5 text-amber-400" />
                 Forgot Password
               </h3>
-              <p className="text-xs text-slate-400">Enter your registered phone number to receive a 6-digit OTP reset PIN via SMS</p>
+              <p className="text-xs text-slate-400">
+                {t(
+                  'Enter your registered phone number. We will send a 6-digit verification code to the email on your account.',
+                  'የተመዝገበውን ስልክ ቁጥር ያስገቡ። 6-አሃድ ማረጋገጫ ኮድ ወደአልክት ላይ ያለውትን ኢሜይል እንልካለን።'
+                )}
+              </p>
             </div>
 
-            {/* Show OTP if in demo mode */}
-            {demoOTP && (
-              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-center space-y-2">
-                <p className="text-xs text-amber-400 font-semibold">📱 SMS OTP Sent! (Demo Mode – PIN shown below)</p>
-                <div className="flex items-center justify-center gap-2">
-                  {demoOTP.split('').map((digit, i) => (
-                    <div key={i} className="w-10 h-12 rounded-xl bg-slate-950 border border-amber-500/40 flex items-center justify-center text-xl font-extrabold text-amber-400 shadow-inner">
-                      {digit}
-                    </div>
-                  ))}
-                </div>
-                <p className="text-[10px] text-slate-400">This PIN expires in 15 minutes. Switching to Reset view automatically...</p>
-              </div>
-            )}
-
-            <form onSubmit={handleForgotPassword} className="space-y-4">
+            <form noValidate onSubmit={handleForgotPassword} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-200 mb-1.5">Registered Phone Number (+251):</label>
                 <div className="relative">
@@ -800,7 +886,7 @@ export const Login = () => {
                   </span>
                 ) : (
                   <>
-                    <span>Send SMS Reset PIN</span>
+                    <span>Send Verification Code</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
@@ -827,8 +913,45 @@ export const Login = () => {
                 <Lock className="w-5 h-5 text-sky-400" />
                 Reset Your Password
               </h3>
-              <p className="text-xs text-slate-400">Enter the 6-digit OTP PIN from your SMS and set your new password</p>
+              <p className="text-xs text-slate-400">
+                {codeDestination
+                  ? `Enter the 6-digit code sent to ${codeDestination}${codeChannel ? ` by ${codeChannel === 'EMAIL' ? 'email' : 'SMS'}` : ''}, then set your new password.`
+                  : t('Enter the 6-digit verification code you received, then set your new password', 'የ6-አሃድ ማረጋገጫ ኮድ ያስገቡ፣ ከዚያ ስልክ ይለውጡ')}
+              </p>
             </div>
+
+            {success && (
+              <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold text-center flex items-center justify-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{success}</span>
+              </div>
+            )}
+
+            {demoOTP && (
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2">
+                <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wide">
+                  Email delivery not configured
+                </p>
+                <p className="text-[11px] text-amber-300/90 leading-relaxed">
+                  No SMTP relay is configured, so nothing was actually sent. This
+                  code is shown here instead. To send it for real, set{' '}
+                  <code className="font-mono">SMTP_HOST</code>,{' '}
+                  <code className="font-mono">SMTP_USER</code>,{' '}
+                  <code className="font-mono">SMTP_PASS</code> and{' '}
+                  <code className="font-mono">EMAIL_FROM</code> in the server env
+                  file, then restart the server. Gmail and Outlook require{' '}
+                  <code className="font-mono">SMTP_PASS</code> to be an App
+                  Password, not the account password.
+                </p>
+                <div className="flex items-center justify-center gap-2">
+                  {demoOTP.split('').map((digit, i) => (
+                    <span key={i} className="w-9 h-11 rounded-lg bg-amber-500/10 border border-amber-500/40 text-center text-lg font-extrabold text-amber-400 flex items-center justify-center">
+                      {digit}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <form onSubmit={handleResetPassword} className="space-y-4">
               {/* Phone */}
@@ -849,7 +972,9 @@ export const Login = () => {
 
               {/* OTP Code */}
               <div>
-                <label className="block text-xs font-bold text-slate-200 mb-2">6-Digit OTP Verification PIN:</label>
+                <label className="block text-xs font-bold text-slate-200 mb-2">
+                  {t('6-Digit Verification Code:', 'የ6-አሃድ ማረጋገጫ ኮድ:')}
+                </label>
                 <div className="flex items-center gap-2 justify-center">
                   {[...Array(6)].map((_, i) => (
                     <input
@@ -929,10 +1054,16 @@ export const Login = () => {
             </form>
 
             <div className="flex items-center justify-between pt-2 border-t border-slate-800">
-              <button onClick={() => switchView('FORGOT_PASSWORD')} className="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1 font-bold transition-colors">
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Request New OTP</span>
-              </button>
+              <button onClick={handleResendCode} disabled={resendCooldown > 0 || loading} className="text-xs text-sky-400 hover:text-sky-300 flex items-center gap-1 font-extrabold transition-colors disabled:text-slate-600 disabled:hover:text-slate-600 disabled:cursor-not-allowed">
+                  {resendCooldown > 0 ? (
+                    <span>Resend code in {resendCooldown}s</span>
+                  ) : (
+                    <>
+                      <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
+                      <span>Resend Code</span>
+                    </>
+                  )}
+                </button>
               <button onClick={() => switchView('SIGN_IN')} className="text-xs text-emerald-400 hover:text-emerald-300 font-extrabold hover:underline transition-colors">
                 Back to Sign In
               </button>

@@ -21,7 +21,7 @@ async function evaluateCreditRisk(customerId, requestedNewAmount = 0) {
   const overdueTx = await db.all(`
     SELECT * FROM credit_transactions 
     WHERE customer_id = $1 
-    AND status IN ('PENDING', 'PARTIALLY_PAID') 
+    AND status IN ('PENDING', 'PARTIALLY_PAID', 'OVERDUE') 
     AND due_date < $2
   `, [customerId, currentDate]);
 

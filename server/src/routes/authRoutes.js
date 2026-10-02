@@ -1,6 +1,6 @@
 const express = require('express');
 const { body } = require('express-validator');
-const { registerUser, loginUser, getMe, forgotPassword, resetPassword } = require('../controllers/authController');
+const { registerUser, loginUser, getMe, forgotPassword, resetPassword, changePassword } = require('../controllers/authController');
 const { authenticateToken } = require('../middleware/auth');
 const { validateResult } = require('../middleware/validate');
 
@@ -9,8 +9,24 @@ const router = express.Router();
 router.post(
   '/register',
   [
-    body('fullName').notEmpty().withMessage('Full name is required'),
-    body('phone').notEmpty().withMessage('Phone number is required'),
+    body('fullName').notEmpty().withMessage('Full name is required').trim(),
+    body('phone').notEmpty().withMessage('Phone number is required').trim(),
+    // Email is mandatory: it is the channel the password-reset OTP is delivered
+    // to, so an account without one cannot be recovered.
+    // .trim() runs before isEmail() rather than after. Without it a trailing
+    // space — invisible to the person typing, and easy to leave by accident —
+    // fails validation with "a valid email address is required" and no way for
+    // the user to see why. The controller lowercases it separately.
+    body('email')
+      .exists({ values: 'falsy' })
+      .withMessage('Email is required. It is how you receive password reset verification codes.')
+      .bail()
+      .trim()
+      .notEmpty()
+      .withMessage('Email is required. It is how you receive password reset verification codes.')
+      .bail()
+      .isEmail()
+      .withMessage('A valid email address is required'),
     body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
     body('role').isIn(['ADMIN', 'MERCHANT', 'CUSTOMER']).withMessage('Role must be ADMIN, MERCHANT, or CUSTOMER'),
     validateResult
@@ -31,7 +47,7 @@ router.post(
 router.post(
   '/forgot-password',
   [
-    body('phone').notEmpty().withMessage('Phone number is required to receive OTP reset PIN'),
+    body('phone').notEmpty().withMessage('Phone number is required to receive the verification code'),
     validateResult
   ],
   forgotPassword
@@ -41,11 +57,24 @@ router.post(
   '/reset-password',
   [
     body('phone').notEmpty().withMessage('Phone number is required'),
-    body('otpCode').notEmpty().isLength({ min: 6, max: 6 }).withMessage('6-digit OTP code is required'),
+    body('otpCode').notEmpty().withMessage('Verification code is required').isLength({ min: 6, max: 6 }).withMessage('Verification code must be exactly 6 digits'),
     body('newPassword').isLength({ min: 6 }).withMessage('New password must be at least 6 characters'),
     validateResult
   ],
   resetPassword
+);
+
+// In-app password change for someone already signed in. Verifies the current
+// password directly instead of routing through the OTP reset.
+router.post(
+  '/change-password',
+  [
+    body('currentPassword').notEmpty().withMessage('Current password is required'),
+    body('newPassword').isLength({ min: 6 }).withMessage('New password must be at least 6 characters'),
+    validateResult
+  ],
+  authenticateToken,
+  changePassword
 );
 
 router.get('/me', authenticateToken, getMe);

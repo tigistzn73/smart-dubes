@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { PaymentModal } from '../components/PaymentModal';
@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Receipt,
   X,
+  Loader2,
   Bell,
   AlertCircle,
   PanelLeftClose,
@@ -21,6 +22,7 @@ import {
   Maximize2,
   Minimize2
 } from 'lucide-react';
+import { getErrorMessage } from '../utils/errorHelper';
 
 export const CustomerPortal = () => {
   const { user } = useAuth();
@@ -71,11 +73,29 @@ export const CustomerPortal = () => {
   const [selectedMerchantFilter, setSelectedMerchantFilter] = useState('ALL');
   const [selectedScheduleTx, setSelectedScheduleTx] = useState(null); // receipt that opened the builder
   const [selectedTxIds, setSelectedTxIds] = useState([]); // multi-select for bulk scheduling
+  const [scheduleError, setScheduleError] = useState('');
+  const [applyingSchedule, setApplyingSchedule] = useState(false);
 
   // Alerts Popover Modal State
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [dismissedAlertIds, setDismissedAlertIds] = useState([]);
   const [readAlertIds, setReadAlertIds] = useState([]);
+
+  // Court letter issued by a merchant for an overdue Dube. null = reader closed.
+  const [openCourtLetter, setOpenCourtLetter] = useState(null);
+  // The letter modal defaults to the formal image and offers the plain text as
+  // an alternative. Text-only mode is also the automatic fallback when the image
+  // is unavailable or fails to load, so the notice is never blocked on an image.
+  const [letterView, setLetterView] = useState('image');
+  const [letterImageFailed, setLetterImageFailed] = useState(false);
+  const [letterImageLoading, setLetterImageLoading] = useState(false);
+
+  const openLetter = (notice) => {
+    setOpenCourtLetter(notice);
+    setLetterView(notice?.image_available ? 'image' : 'text');
+    setLetterImageFailed(false);
+    setLetterImageLoading(false);
+  };
 
   // Listen for mobile sidebar toggle and direct tab switch from Navbar
   useEffect(() => {
@@ -112,8 +132,6 @@ export const CustomerPortal = () => {
     }
   };
 
-  const [applyingSchedule, setApplyingSchedule] = useState(false);
-
   const handleGenerateSchedule = async () => {
     // Fall back to the store/overall balance only when no specific receipt is targeted
     const targetIds = scheduleTargetTxIds;
@@ -133,7 +151,11 @@ export const CustomerPortal = () => {
       const p = profiles.find(pr => String(pr.merchant_id) === String(selectedScheduleMerchant));
       if (p) targetBalance = p.current_balance;
     }
-    if (!targetBalance) return;
+    if (!targetBalance || targetBalance <= 0) {
+      setScheduleError(t('Target balance must be greater than 0 to generate a repayment schedule.', 'የክፍያ ሰሌዳ ለማዘጋጀት ቀሪው ዕዳ ከ0 በላይ መሆን አለበት።'));
+      return;
+    }
+    setScheduleError('');
     try {
       const res = await fetch('/api/customer/schedule', {
         method: 'POST',
@@ -151,9 +173,10 @@ export const CustomerPortal = () => {
         })
       });
       const sData = await res.json();
+      if (!res.ok) throw new Error(getErrorMessage(sData, 'Failed to calculate schedule.'));
       setScheduleResult(sData);
     } catch (err) {
-      alert(err.message);
+      setScheduleError(getErrorMessage(err));
     }
   };
 
@@ -175,7 +198,11 @@ export const CustomerPortal = () => {
       const p = profiles.find(pr => String(pr.merchant_id) === String(selectedScheduleMerchant));
       if (p) targetBalance = p.current_balance;
     }
-    if (!targetBalance) return;
+    if (!targetBalance || targetBalance <= 0) {
+      setScheduleError(t('Target balance must be greater than 0.', 'ቀሪው ዕዳ ከ0 በላይ መሆን አለበት።'));
+      return;
+    }
+    setScheduleError('');
     try {
       setApplyingSchedule(true);
       const res = await fetch('/api/customer/schedule/apply', {
@@ -194,14 +221,13 @@ export const CustomerPortal = () => {
         })
       });
       const sData = await res.json();
-      if (!res.ok) throw new Error(sData.error || 'Failed to apply schedule.');
-      alert('✓ Flexible Repayment Schedule applied successfully!');
+      if (!res.ok) throw new Error(getErrorMessage(sData, 'Failed to apply schedule.'));
       setScheduleModalOpen(false);
       setScheduleResult(null);
       setSelectedTxIds([]);
       fetchCustomerDashboard();
     } catch (err) {
-      alert(err.message);
+      setScheduleError(getErrorMessage(err));
     } finally {
       setApplyingSchedule(false);
     }
@@ -258,6 +284,19 @@ export const CustomerPortal = () => {
   const notifications = data?.notifications || [];
   const visibleNotifications = notifications.filter(n => !dismissedAlertIds.includes(n.id));
   const unreadCount = visibleNotifications.filter(n => !readAlertIds.includes(n.id)).length;
+
+  // Court letters still standing, i.e. the debt behind them is unpaid. These
+  // drive the red banner and the reader modal.
+  const courtLetters = data?.notices || [];
+  const activeCourtLetters = courtLetters.filter(n => !n.is_settled);
+  const settledCourtLetters = courtLetters.filter(n => n.is_settled);
+  // Each letter grants a fresh grace period counted from the day it was issued.
+  const courtLetterDeadline = (n) => {
+    const issued = new Date(n.court_letter_sent_at);
+    if (Number.isNaN(issued.getTime())) return null;
+    issued.setDate(issued.getDate() + (n.grace_days || 7));
+    return issued;
+  };
 
   const dismissAlert = (id) => setDismissedAlertIds(prev => [...prev, id]);
 
@@ -515,6 +554,68 @@ export const CustomerPortal = () => {
           {/* TAB 1: DASHBOARD HOME */}
           {activeTab === 'DASHBOARD' && (
             <div className="space-y-6">
+              {/* Court Letter Warning — only rendered while the debt is unpaid */}
+              {activeCourtLetters.map(n => {
+                const deadline = courtLetterDeadline(n);
+                const daysLeft = deadline
+                  ? Math.max(0, Math.ceil((deadline.getTime() - Date.now()) / 86400000))
+                  : null;
+                return (
+                  <div
+                    key={n.id}
+                    className="rounded-2xl border border-red-500/50 bg-red-950/40 p-4 md:p-5 shadow-lg shadow-red-950/20 space-y-3"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="p-2.5 bg-red-500/20 text-red-400 rounded-xl border border-red-500/30 shrink-0">
+                        <AlertCircle className="w-5 h-5" />
+                      </div>
+                      <div className="flex-1 space-y-1 min-w-0">
+                        <h3 className="text-sm md:text-base font-black text-red-300 uppercase tracking-wide">
+                          {t('Final Court Letter Issued', 'ፍጹም የዳኝነት ደብዳቤ ተላክልቷል')}
+                        </h3>
+                        <p className="text-xs text-red-200/90 leading-relaxed">
+                          {t(
+                            `${n.store_name} has issued a formal court letter (Ref: ${n.court_letter_ref}) for your overdue Dube of ${n.amount.toFixed(2)} ETB, which passed its due date on ${n.due_date}.`,
+                            `${n.store_name} በ${n.amount.toFixed(2)} ETB የደነበረውን የዱቤ ብድር ስለ ${n.due_date} ያለፈበት ጊዜ ፍጹም የዳኝነት ደብዳቤ (ማጣቀሻ: ${n.court_letter_ref}) አስደምጥሷል።`
+                          )}
+                        </p>
+                        <p className="text-xs text-red-300/80">
+                          {daysLeft !== null
+                            ? t(
+                                `You have ${daysLeft} day${daysLeft === 1 ? '' : 's'} left to settle in full before this is referred to court.`,
+                                `ከዳኝነት በመቅረብበት በፊት ${daysLeft} ቀን ${daysLeft === 1 ? 'ቀን' : 'ቀናት'} ያለዎት ነው።`
+                              )
+                            : t('Settle in full immediately to avoid legal action.', 'የሕግ እርምጃ እንዳይወሰዱ ወዲያውኑ ሙሉ በሙሉ ይከፍሉ።')}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => openLetter(n)}
+                        className="px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-extrabold transition-colors cursor-pointer"
+                      >
+                        {t('Read The Court Letter', 'ደብዳቤውን አንብብ')}
+                      </button>
+                      {n.transaction_id && (
+                        <button
+                          onClick={() => {
+                            const tx = transactions.find(t => t.id === n.transaction_id);
+                            if (tx) {
+                              setSelectedTxForPayment(tx);
+                            } else {
+                              setActiveTab('TRANSACTIONS');
+                            }
+                          }}
+                          className="px-3.5 py-2 rounded-xl bg-red-950/60 hover:bg-red-900/60 text-red-200 text-xs font-extrabold border border-red-500/30 transition-colors cursor-pointer"
+                        >
+                          {t('Pay This Debt Now', 'አሁኑ ይክፈሉ')}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
               {/* Balance Summary Header */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {/* Card 1: Outstanding Debt */}
@@ -1356,6 +1457,13 @@ export const CustomerPortal = () => {
             </div>
 
             <div className="space-y-4">
+              {scheduleError && (
+                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-bold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{scheduleError}</span>
+                </div>
+              )}
+
               {/* Selected Target Account Banner */}
               {(() => {
                 const selectedP = selectedScheduleMerchant !== 'ALL'
@@ -1551,6 +1659,191 @@ export const CustomerPortal = () => {
         </div>
       )}
 
+      {/* Court Letter Reader */}
+      {openCourtLetter && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+          <div className="glass-panel w-full max-w-2xl rounded-2xl border border-red-500/30 shadow-2xl shadow-red-950/30 flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-red-500/20 px-5 py-4 shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
+                <div className="min-w-0">
+                  <h3 className="text-sm font-black text-red-300 uppercase tracking-wide truncate">
+                    {t('Court Letter', 'የዳኝነት ደብዳቤ')}
+                  </h3>
+                  <p className="text-[10px] font-mono text-slate-500 truncate">
+                    {t('Ref', 'ማጣቀሻ')}: {openCourtLetter.court_letter_ref}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setOpenCourtLetter(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-5 py-4 overflow-y-auto flex-1">
+              {openCourtLetter.is_settled && (
+                <div className="mb-4 flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <p className="text-xs text-emerald-300 font-semibold">
+                    {t(
+                      'This debt has been settled. This notice is kept on your record for reference only and no legal action will be taken.',
+                      'ይህ ዕዳር ተከፍሏል። ይህ ሰነድ ለመታሪያ ብቻ በመዝገብዎ ላይ ቀር ቷል።'
+                    )}
+                  </p>
+                </div>
+              )}
+
+              {/* View switch. Only shown when the image exists; otherwise the text
+                  below is the whole notice. */}
+              {openCourtLetter.image_available && !letterImageFailed && (
+                <div className="mb-3 flex items-center gap-2">
+                  <div className="flex rounded-lg overflow-hidden border border-slate-800">
+                    <button
+                      onClick={() => setLetterView('image')}
+                      aria-pressed={letterView === 'image'}
+                      className={`px-3 py-1.5 text-[10px] font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                        letterView === 'image'
+                          ? 'bg-red-500/20 text-red-300'
+                          : 'bg-slate-900/60 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {t('Document', 'ሰነድ')}
+                    </button>
+                    <button
+                      onClick={() => setLetterView('text')}
+                      aria-pressed={letterView === 'text'}
+                      className={`px-3 py-1.5 text-[10px] font-mono font-bold uppercase tracking-wider border-l border-slate-800 transition-colors cursor-pointer ${
+                        letterView === 'text'
+                          ? 'bg-red-500/20 text-red-300'
+                          : 'bg-slate-900/60 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {t('Plain text', 'ጽሑፍ')}
+                    </button>
+                  </div>
+                  {letterView === 'image' && openCourtLetter.image_url && (
+                    <a
+                      href={openCourtLetter.image_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] font-mono text-slate-500 hover:text-slate-300 underline underline-offset-2"
+                    >
+                      {t('Open full size', 'በሙሉ መጠን ክፈት')}
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {/* The formal letter, rendered as a PNG. Fails soft: if the image
+                  cannot be produced or loaded, the text version is shown instead
+                  so the customer is never left without their notice. */}
+              {openCourtLetter.image_available && letterView === 'image' && !letterImageFailed ? (
+                <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-2">
+                  {letterImageLoading && (
+                    <div className="flex items-center justify-center gap-2 py-16 text-[11px] font-mono text-slate-500">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      {t('Rendering document...', 'ሰነዱ በመስራት ላይ...')}
+                    </div>
+                  )}
+                  <img
+                    src={openCourtLetter.image_url}
+                    alt={t(
+                      `Court letter ${openCourtLetter.court_letter_ref} issued by ${openCourtLetter.store_name}`,
+                      `የዳኝነት ደብዳቤ ${openCourtLetter.court_letter_ref}`
+                    )}
+                    className={`w-full h-auto rounded-lg bg-white ${letterImageLoading ? 'hidden' : ''}`}
+                    loading="lazy"
+                    onLoad={() => { setLetterImageLoading(false); setLetterImageFailed(false); }}
+                    onError={() => { setLetterImageLoading(false); setLetterImageFailed(true); }}
+                  />
+                </div>
+              ) : (
+                <pre className="whitespace-pre-wrap break-words font-mono text-[11px] md:text-xs leading-relaxed text-slate-300 bg-slate-950/50 border border-slate-800 rounded-xl p-4">
+                  {openCourtLetter.court_letter_body}
+                </pre>
+              )}
+
+              <div className="mt-3 flex items-center justify-between text-[10px] font-mono text-slate-500">
+                <span>
+                  {t('Issued', 'የተሰጠ')}:{' '}
+                  {new Date(openCourtLetter.court_letter_sent_at).toLocaleString()}
+                </span>
+                <span>
+                  {t('Final settlement deadline', 'የመጨረሻ ክፍያ ቀን')}:{' '}
+                  {(() => {
+                    const d = courtLetterDeadline(openCourtLetter);
+                    return d ? d.toLocaleDateString() : 'N/A';
+                  })()}
+                </span>
+              </div>
+
+              {/* History of letters the customer has already dealt with */}
+              {settledCourtLetters.length > 0 && (
+                <div className="mt-5 pt-4 border-t border-slate-800 space-y-2">
+                  <p className="text-[10px] uppercase font-mono tracking-wider font-extrabold text-slate-500">
+                    {t('Previously Settled Notices', 'የተከፈሉ ቀድሞ ሰነዶች')}
+                  </p>
+                  {settledCourtLetters.map(n => (
+                    <button
+                      key={n.id}
+                      onClick={() => openLetter(n)}
+                      className="w-full flex items-center justify-between gap-3 text-left px-3 py-2 rounded-lg bg-slate-900/40 border border-slate-800 hover:border-slate-700 transition-colors cursor-pointer"
+                    >
+                      <span className="text-[11px] text-slate-400 truncate">
+                        {n.store_name} &middot; {n.court_letter_ref}
+                      </span>
+                      <span className="text-[10px] font-bold uppercase text-emerald-400 shrink-0">
+                        {t('Settled', 'ተከፍሏል')}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-3.5 border-t border-slate-800 flex flex-col sm:flex-row gap-2 shrink-0">
+              {openCourtLetter.is_settled ? (
+                <button
+                  onClick={() => setOpenCourtLetter(null)}
+                  className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  {t('Close', 'ዝጋ')}
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => {
+                      const tx = transactions.find(t => t.id === openCourtLetter.transaction_id);
+                      setOpenCourtLetter(null);
+                      if (tx) {
+                        setSelectedTxForPayment(tx);
+                      } else {
+                        setActiveTab('TRANSACTIONS');
+                      }
+                    }}
+                    className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold transition-colors cursor-pointer"
+                  >
+                    {t('Pay This Debt Now', 'አሁኑ ይክፈሉ')}
+                  </button>
+                  <button
+                    onClick={() => setOpenCourtLetter(null)}
+                    className="py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    {t('Close', 'ዝጋ')}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Alerts Warnings Modal */}
       {alertsOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
@@ -1577,13 +1870,17 @@ export const CustomerPortal = () => {
                 </div>
               ) : (
                 visibleNotifications.map(n => {
+                  const isCourtLetter = n.type === 'COURT_LETTER';
                   const isOverdue = n.type === 'OVERDUE_ALERT';
                   const isReminder = n.type === 'REMINDER';
+                  const isCritical = isCourtLetter || isOverdue;
                   return (
                     <div
                       key={n.id}
                       className={`p-3.5 rounded-xl border flex gap-3 items-start transition-all ${
-                        isOverdue
+                        isCourtLetter
+                          ? 'bg-red-500/15 border-red-500/40 text-red-100'
+                          : isOverdue
                           ? 'bg-red-500/10 border-red-500/20 text-red-200'
                           : isReminder
                           ? 'bg-amber-500/10 border-amber-500/20 text-amber-200'
@@ -1591,7 +1888,7 @@ export const CustomerPortal = () => {
                       }`}
                     >
                       <div className="mt-0.5 shrink-0">
-                        {isOverdue ? (
+                        {isCritical ? (
                           <AlertCircle className="w-4 h-4 text-red-400 animate-pulse" />
                         ) : (
                           <Bell className="w-4 h-4 text-amber-400" />
@@ -1599,18 +1896,30 @@ export const CustomerPortal = () => {
                       </div>
                       <div className="flex-1 space-y-1">
                         <div className="flex justify-between items-center text-[10px] uppercase font-mono tracking-wider font-extrabold">
-                          <span className={isOverdue ? 'text-red-400' : isReminder ? 'text-amber-400' : 'text-slate-400'}>
+                          <span className={isCritical ? 'text-red-400' : isReminder ? 'text-amber-400' : 'text-slate-400'}>
+                            {n.type === 'COURT_LETTER' && '⚖️ Court Letter Notice'}
                             {n.type === 'OVERDUE_ALERT' && '⚠️ Critical Overdue Warning'}
                             {n.type === 'REMINDER' && '📅 Repayment Reminder'}
                             {n.type === 'CREDIT_ISSUED' && '💳 New Credit Logged'}
                             {n.type === 'PAYMENT_RECEIPT' && '🧾 Payment Receipt Confirmed'}
-                            {!['OVERDUE_ALERT', 'REMINDER', 'CREDIT_ISSUED', 'PAYMENT_RECEIPT'].includes(n.type) && '💬 Store Alert'}
+                            {!['COURT_LETTER', 'OVERDUE_ALERT', 'REMINDER', 'CREDIT_ISSUED', 'PAYMENT_RECEIPT'].includes(n.type) && '💬 Store Alert'}
                           </span>
                           <span className="text-slate-500 font-normal normal-case">
                             {new Date(n.sent_at).toLocaleString()}
                           </span>
                         </div>
                         <p className="text-xs leading-relaxed font-sans">{n.message}</p>
+                        {isCourtLetter && activeCourtLetters.length > 0 && (
+                          <button
+                            onClick={() => {
+                              setAlertsOpen(false);
+                              openLetter(activeCourtLetters[0]);
+                            }}
+                            className="mt-1 px-2.5 py-1 rounded-lg bg-red-600/80 hover:bg-red-500 text-white text-[10px] font-extrabold uppercase tracking-wide transition-colors cursor-pointer"
+                          >
+                            {t('Read Full Court Letter', 'ሙሉ ደብዳቤ አንብብ')}
+                          </button>
+                        )}
                         <div className="flex justify-between items-center pt-1 border-t border-slate-800/40 text-[9px] font-mono text-slate-500">
                           <span>Phone: {n.phone}</span>
                           <div className="flex items-center gap-2">

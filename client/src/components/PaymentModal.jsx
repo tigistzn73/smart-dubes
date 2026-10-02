@@ -20,6 +20,7 @@ import {
   Clock,
   Store
 } from 'lucide-react';
+import { getErrorMessage } from '../utils/errorHelper';
 export const PaymentModal = ({ isOpen, onClose, transaction, customerId, bankAccount, onPaymentSuccess }) => {
   const [gateway, setGateway] = useState('TELEBIRR');
   const [copiedAccount, setCopiedAccount] = useState(false);
@@ -116,6 +117,12 @@ export const PaymentModal = ({ isOpen, onClose, transaction, customerId, bankAcc
     e.preventDefault();
     setError('');
 
+    const parsedAmount = parseFloat(amount);
+    if (!amount || isNaN(parsedAmount) || parsedAmount <= 0) {
+      setError('⚠️ Please enter a valid repayment amount greater than 0 ETB.');
+      return;
+    }
+
     if (!refCode || !refCode.trim()) {
       setError(`⚠️ Payment Reference Code is strictly required for ${gateway.replace('_', ' ')}. Please enter your official transaction ID.`);
       return;
@@ -150,7 +157,7 @@ export const PaymentModal = ({ isOpen, onClose, transaction, customerId, bankAcc
         body: JSON.stringify({
           transactionId: transaction.id,
           customerId: customerId || transaction.customer_id,
-          amount: parseFloat(amount),
+          amount: parsedAmount,
           paymentGateway: gateway,
           referenceCode: refCode.trim(),
           receiptUrl: receiptUrl,
@@ -161,13 +168,13 @@ export const PaymentModal = ({ isOpen, onClose, transaction, customerId, bankAcc
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Payment settlement failed.');
+        throw new Error(getErrorMessage(data, 'Payment settlement failed.'));
       }
 
       setSuccessReceipt(data.receipt);
       if (onPaymentSuccess) onPaymentSuccess(data.receipt);
     } catch (err) {
-      setError(err.message);
+      setError(getErrorMessage(err));
     } finally {
       setSubmitting(false);
     }
@@ -306,7 +313,7 @@ export const PaymentModal = ({ isOpen, onClose, transaction, customerId, bankAcc
           </div>
         ) : (
           /* PAYMENT GATEWAY INTERFACE */
-          <form onSubmit={handlePay} className="space-y-4">
+          <form noValidate onSubmit={handlePay} className="space-y-4">
             {/* Multi-Merchant Repayment Allocation Card */}
             {transaction.isMultiMerchant && transaction.merchantAllocations && (
               <div className="bg-slate-900/90 rounded-xl p-3.5 border border-sky-500/30 space-y-2">

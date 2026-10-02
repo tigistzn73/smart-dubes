@@ -3,6 +3,14 @@ const { evaluateCreditRisk } = require('../services/riskEngine');
 const { sendSMS, getTemplate } = require('../services/smsService');
 const { logAudit } = require('../services/auditService');
 const { approveUploadedReceipt } = require('../services/paymentGatewayService');
+const {
+  getEscalationCases: fetchEscalationCases,
+  getEscalationCaseById,
+  sendWarning,
+  sendCourtLetter,
+  resolveEscalationCase: resolveCase,
+  closeEscalationCase: closeCase
+} = require('../services/escalationService');
 
 // Get merchant profile for current user
 async function getMerchantProfile(req, res) {
@@ -28,8 +36,8 @@ async function getMerchantCustomers(req, res) {
     const customers = await db.all(`
       SELECT c.*, 
         (c.credit_limit - c.current_balance) as available_credit,
-        (SELECT COUNT(*) FROM credit_transactions ct WHERE ct.customer_id = c.id AND ct.status IN ('PENDING', 'PARTIALLY_PAID')) as pending_transactions_count,
-        (SELECT COUNT(*) FROM credit_transactions ct WHERE ct.customer_id = c.id AND ct.status IN ('PENDING', 'PARTIALLY_PAID') AND ct.due_date < CURRENT_DATE) as overdue_count
+        (SELECT COUNT(*) FROM credit_transactions ct WHERE ct.customer_id = c.id AND ct.status IN ('PENDING', 'PARTIALLY_PAID', 'OVERDUE')) as pending_transactions_count,
+        (SELECT COUNT(*) FROM credit_transactions ct WHERE ct.customer_id = c.id AND ct.status IN ('PENDING', 'PARTIALLY_PAID', 'OVERDUE') AND ct.due_date < CURRENT_DATE) as overdue_count
       FROM customer_profiles c
       WHERE c.merchant_id = $1
       ORDER BY c.created_at DESC
@@ -378,7 +386,7 @@ async function triggerSMSReminder(req, res) {
     // Get earliest pending transaction due date
     const pendingTx = await db.get(`
       SELECT due_date, total_amount FROM credit_transactions 
-      WHERE customer_id = $1 AND status IN ('PENDING', 'PARTIALLY_PAID') 
+      WHERE customer_id = $1 AND status IN ('PENDING', 'PARTIALLY_PAID', 'OVERDUE') 
       ORDER BY due_date ASC LIMIT 1
     `, [customerId]);
 
@@ -414,6 +422,42 @@ async function triggerSMSReminder(req, res) {
   }
 }
 
+// SMS history for this merchant's own customers. Ownership is derived from the
+// authenticated user, never from the request, so one merchant cannot read
+// another merchant's message log.
+async function getMerchantSMSHistory(req, res) {
+  try {
+    const merchant = await db.get('SELECT id FROM merchants WHERE user_id = $1', [req.user.id]);
+    if (!merchant) {
+      return res.status(404).json({ error: 'Merchant account not linked.' });
+    }
+
+    const rows = await db.all(`
+      SELECT s.id, s.customer_id, s.phone, s.type, s.status, s.sent_at, s.message
+      FROM sms_notifications s
+      WHERE s.customer_id IN (SELECT id FROM customer_profiles WHERE merchant_id = $1)
+      ORDER BY s.sent_at DESC
+      LIMIT 200
+    `, [merchant.id]);
+
+    const summary = rows.reduce((acc, r) => {
+      acc[r.status] = (acc[r.status] || 0) + 1;
+      return acc;
+    }, {});
+
+    res.json({
+      messages: rows,
+      summary,
+      // Surfaced so the UI can tell a gateway rejection apart from a
+      // successful send. Rows are written before the gateway call, so
+      // SIMULATED means nothing was billed or delivered.
+      gatewayNote: 'SIMULATED rows were not delivered. FAILED rows were rejected by the SMS gateway.'
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
 // Approve or Reject an Uploaded Receipt Repayment
 async function approveRepayment(req, res) {
   const { repaymentId, action } = req.body;
@@ -433,6 +477,152 @@ async function approveRepayment(req, res) {
   }
 }
 
+async function getEscalationCases(req, res) {
+  try {
+    const merchant = await db.get('SELECT id FROM merchants WHERE user_id = $1', [req.user.id]);
+    if (!merchant) {
+      return res.status(404).json({ error: 'Merchant account not linked.' });
+    }
+
+    const cases = await fetchEscalationCases(merchant.id);
+    res.json({ cases });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+async function triggerEscalationWarning(req, res) {
+  const { caseId } = req.body;
+
+  try {
+    const merchant = await db.get('SELECT id FROM merchants WHERE user_id = $1', [req.user.id]);
+    if (!merchant) {
+      return res.status(404).json({ error: 'Merchant account not linked.' });
+    }
+
+    const escalationCase = await getEscalationCaseById(caseId, merchant.id);
+    if (!escalationCase) {
+      return res.status(404).json({ error: 'Escalation case not found.' });
+    }
+
+    const result = await sendWarning(caseId, {
+      trigger: 'MANUAL',
+      actorUserId: req.user.id,
+      actorName: req.user.fullName
+    });
+
+    logAudit({
+      userId: req.user.id,
+      actorName: req.user.fullName,
+      action: 'ESCALATION_WARNING_TRIGGERED',
+      resource: `Escalation Case #${caseId}`,
+      details: { customerId: escalationCase.customer_id, amount: escalationCase.amount }
+    });
+
+    res.json({
+      message: 'Warning SMS sent to customer.',
+      escalation: result
+    });
+  } catch (err) {
+    // A warning that clashes with an already-issued court letter is the
+    // merchant's mistake to fix, not a server fault.
+    res.status(409).json({ error: err.message });
+  }
+}
+
+async function triggerCourtLetter(req, res) {
+  const { caseId } = req.body;
+
+  try {
+    const merchant = await db.get('SELECT id FROM merchants WHERE user_id = $1', [req.user.id]);
+    if (!merchant) {
+      return res.status(404).json({ error: 'Merchant account not linked.' });
+    }
+
+    const escalationCase = await getEscalationCaseById(caseId, merchant.id);
+    if (!escalationCase) {
+      return res.status(404).json({ error: 'Escalation case not found.' });
+    }
+
+    const result = await sendCourtLetter(caseId, {
+      trigger: 'MANUAL',
+      actorUserId: req.user.id,
+      actorName: req.user.fullName
+    });
+
+    logAudit({
+      userId: req.user.id,
+      actorName: req.user.fullName,
+      action: 'COURT_LETTER_TRIGGERED',
+      resource: `Escalation Case #${caseId}`,
+      details: { customerId: escalationCase.customer_id, amount: escalationCase.amount, letterRef: result.letterRef }
+    });
+
+    res.json({
+      message: 'Court letter issued. It is now published on the customer\'s Smart Dube page and an SMS notice was sent.',
+      letterRef: result.letterRef,
+      courtLetter: result.courtLetterBody,
+      escalation: result
+    });
+  } catch (err) {
+    // Refusing to issue a duplicate legal notice is a merchant-correctable
+    // conflict, not a server fault.
+    res.status(409).json({ error: err.message });
+  }
+}
+
+async function resolveEscalationCase(req, res) {
+  const { caseId } = req.params;
+  const { notes } = req.body;
+
+  try {
+    const merchant = await db.get('SELECT id FROM merchants WHERE user_id = $1', [req.user.id]);
+    if (!merchant) {
+      return res.status(404).json({ error: 'Merchant account not linked.' });
+    }
+
+    const result = await resolveCase(caseId, merchant.id, notes);
+
+    logAudit({
+      userId: req.user.id,
+      actorName: req.user.fullName,
+      action: 'ESCALATION_CASE_RESOLVED',
+      resource: `Escalation Case #${caseId}`,
+      details: { notes }
+    });
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+async function closeEscalationCase(req, res) {
+  const { caseId } = req.params;
+  const { notes } = req.body;
+
+  try {
+    const merchant = await db.get('SELECT id FROM merchants WHERE user_id = $1', [req.user.id]);
+    if (!merchant) {
+      return res.status(404).json({ error: 'Merchant account not linked.' });
+    }
+
+    const result = await closeCase(caseId, merchant.id, notes);
+
+    logAudit({
+      userId: req.user.id,
+      actorName: req.user.fullName,
+      action: 'ESCALATION_CASE_CLOSED',
+      resource: `Escalation Case #${caseId}`,
+      details: { notes }
+    });
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
 module.exports = {
   getMerchantProfile,
   getMerchantCustomers,
@@ -442,5 +632,11 @@ module.exports = {
   createCreditTransaction,
   getMerchantTransactions,
   triggerSMSReminder,
-  approveRepayment
+  getMerchantSMSHistory,
+  approveRepayment,
+  getEscalationCases,
+  triggerEscalationWarning,
+  triggerCourtLetter,
+  resolveEscalationCase,
+  closeEscalationCase
 };

@@ -9,7 +9,13 @@ const {
   createCreditTransaction,
   getMerchantTransactions,
   triggerSMSReminder,
-  approveRepayment
+  getMerchantSMSHistory,
+  approveRepayment,
+  getEscalationCases,
+  triggerEscalationWarning,
+  triggerCourtLetter,
+  resolveEscalationCase,
+  closeEscalationCase
 } = require('../controllers/merchantController');
 const { authenticateToken, authorizeRoles } = require('../middleware/auth');
 const { validateResult } = require('../middleware/validate');
@@ -59,7 +65,7 @@ router.post(
   '/transactions',
   [
     body('customerId').notEmpty().withMessage('Customer selection is required'),
-    body('totalAmount').isNumeric().withMessage('Total credit amount must be a valid number'),
+    body('totalAmount').isFloat({ gt: 0 }).withMessage('Total credit amount must be a number greater than 0'),
     body('dueDate').notEmpty().withMessage('Repayment due date is required'),
     validateResult
   ],
@@ -67,6 +73,8 @@ router.post(
 );
 
 router.get('/transactions', getMerchantTransactions);
+
+router.get('/sms-history', getMerchantSMSHistory);
 
 router.post(
   '/sms-reminder',
@@ -85,6 +93,36 @@ router.post(
     validateResult
   ],
   approveRepayment
+);
+
+router.get('/escalations', getEscalationCases);
+
+router.post(
+  '/escalations/warning',
+  [
+    body('caseId').notEmpty().withMessage('Escalation case ID is required'),
+    validateResult
+  ],
+  triggerEscalationWarning
+);
+
+router.post(
+  '/escalations/court-letter',
+  [
+    body('caseId').notEmpty().withMessage('Escalation case ID is required'),
+    validateResult
+  ],
+  triggerCourtLetter
+);
+
+router.put(
+  '/escalations/:caseId/resolve',
+  resolveEscalationCase
+);
+
+router.put(
+  '/escalations/:caseId/close',
+  closeEscalationCase
 );
 
 module.exports = router;

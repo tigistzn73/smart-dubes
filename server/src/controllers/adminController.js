@@ -1,6 +1,7 @@
 const db = require('../config/database');
 const { getGatewayLogs, handleGatewayWebhook } = require('../services/paymentGatewayService');
 const { getAuditLogs, logAudit } = require('../services/auditService');
+const { runSweep, WARNING_PERIOD_DAYS } = require('../services/escalationService');
 
 // Get overview stats & merchant KYC queue
 async function getAdminDashboard(req, res) {
@@ -141,10 +142,36 @@ async function fetchAuditLogs(req, res) {
   }
 }
 
+// Force the overdue-debt sweep to run now instead of waiting for the daily timer.
+// Admin-only: the sweep sends real SMS in live mode, so it must not be
+// reachable by merchants or customers.
+async function runEscalationSweepNow(req, res) {
+  try {
+    const result = await runSweep({ force: true });
+
+    logAudit({
+      userId: req.user.id,
+      actorName: req.user.fullName,
+      action: 'ESCALATION_SWEEP_FORCED',
+      resource: 'Debt Escalation Sweep',
+      details: { checked: result.checked || 0, counts: result.counts || {} }
+    });
+
+    res.json({
+      message: 'Overdue debt sweep executed.',
+      warningPeriodDays: WARNING_PERIOD_DAYS,
+      ...result
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
 module.exports = {
   getAdminDashboard,
   verifyMerchantKYC,
   getPaymentGatewayDiagnostics,
   triggerSimulatedWebhook,
-  fetchAuditLogs
+  fetchAuditLogs,
+  runEscalationSweepNow
 };
