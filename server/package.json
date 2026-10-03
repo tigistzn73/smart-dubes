@@ -16,6 +16,8 @@
     "test:email:required": "node scripts/test_email_mandatory.js",
     "audit:email": "node scripts/audit_email_column.js",
     "test:email": "node scripts/test_email.js",
+    "test:email:ipv4": "node scripts/test_email_ipv4.js",
+    "diagnose:email": "node scripts/diagnose_email_otp.js",
     "export:postman": "node scripts/export-postman.js"
   },
   "dependencies": {

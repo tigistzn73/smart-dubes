@@ -17,6 +17,116 @@
 require('dotenv').config();
 
 const nodemailer = require('nodemailer');
+const dns = require('dns');
+
+// ============================================================
+//  IPv4-only SMTP resolution
+// ============================================================
+// nodemailer resolves the relay hostname itself and then picks ONE address at
+// random from the result:
+//
+//     const host = addresses[Math.floor(Math.random() * addresses.length)];
+//
+// Google publishes A and AAAA records for smtp.gmail.com, so that random pick
+// lands on IPv6 roughly half the time on any host that advertises a non-internal
+// IPv6 interface. A host can advertise IPv6 and still have no route to it --
+// Render's free web services are exactly that shape -- and the send then fails
+// with "connect ENETUNREACH 2607:f8b0:...:587 - Local (:::0)".
+//
+// That is not merely a Render problem. Even on a healthy dual-stack host every
+// individual send is a coin flip, so password-reset delivery fails
+// intermittently for reasons that look like the relay is flaky.
+//
+// Fixing it means removing IPv6 from the candidate list for the SMTP host only.
+// nodemailer exposes no option for this: it calls the global dns.lookup()
+// internally with no injection point, and it filters addresses by comparing the
+// remote family against os.networkInterfaces(), which reports IPv6 as usable on
+// a host that cannot actually route to it.
+//
+// So dns.lookup is wrapped once, for the configured relay hostnames only, and
+// every other lookup in the process (notably the Postgres pool, which already
+// works via Node's Happy Eyeballs) passes through untouched.
+//
+// On by default because IPv4 reaches every SMTP relay this app supports.
+// Set SMTP_IPV4_ONLY=false to opt out on a network where the relay is genuinely
+// reachable over IPv6 only.
+const SMTP_IPV4_ONLY = String(process.env.SMTP_IPV4_ONLY ?? 'true').toLowerCase() === 'true';
+
+/**
+ * Whether this process has a non-internal IPv4 interface. Without one, forcing
+ * IPv4 cannot help and would only replace a working IPv6 path with a failure, so
+ * the wrapper stands down.
+ */
+function hasUsableIpv4Interface() {
+  const interfaces = require('os').networkInterfaces() || {};
+  return Object.values(interfaces)
+    .flat()
+    .some((addr) => addr && addr.family !== 'internal' && (addr.family === 'IPv4' || addr.family === 4));
+}
+
+/**
+ * Restrict dns.lookup to IPv4 for the given hostnames.
+ *
+ * @param {string[]} hostnames Relay hostnames to intercept.
+ * @returns {boolean} Whether the wrapper is installed.
+ */
+function installIpv4OnlyResolver(hostnames) {
+  const targets = new Set(hostnames.filter(Boolean).map((h) => String(h).trim().toLowerCase()));
+  if (!targets.size) return false;
+
+  if (!SMTP_IPV4_ONLY) {
+    console.log('[EMAIL] SMTP_IPV4_ONLY=false — leaving DNS resolution untouched.');
+    return false;
+  }
+  if (!hasUsableIpv4Interface()) {
+    console.warn('[EMAIL] No non-internal IPv4 interface found — leaving DNS resolution untouched.');
+    return false;
+  }
+  if (dns.lookup.__smartDubeIpv4Only) return true;
+
+  const originalLookup = dns.lookup;
+
+  dns.lookup = function patchedLookup(hostname, options, callback) {
+    // Support both lookup(host, cb) and lookup(host, opts, cb).
+    let opts = options;
+    let cb = callback;
+    if (typeof opts === 'function') {
+      cb = opts;
+      opts = {};
+    }
+    opts = opts || {};
+
+    if (!targets.has(String(hostname).toLowerCase())) {
+      return originalLookup.apply(this, arguments);
+    }
+
+    const wantsAll = !!opts.all;
+    return originalLookup.call(this, hostname, { ...opts, family: 4, all: true }, (err, addresses) => {
+      if (err) return cb(err);
+      // Preserve the callback shape the caller asked for: (err, addresses) with
+      // all:true, or (err, address, family) otherwise. nodemailer uses the former.
+      if (wantsAll) return cb(null, addresses);
+      return cb(null, addresses[0].address, addresses[0].family);
+    });
+  };
+  dns.lookup.__smartDubeIpv4Only = true;
+
+  console.log(`[EMAIL] Forcing IPv4 for ${[...targets].join(', ')} (relay selection is otherwise random).`);
+  return true;
+}
+
+// Configured before the transporter is built, because creation is what triggers
+// the first resolution.
+installIpv4OnlyResolver([
+  process.env.SMTP_HOST,
+  'smtp.gmail.com',
+  'smtp-mail.outlook.com',
+  'smtp.office365.com',
+  'smtp.resend.com',
+  'smtp.sendgrid.net',
+  'smtp.mailgun.org',
+  'email-smtp.us-east-1.amazonaws.com'
+]);
 
 // ============================================================
 //  Configuration
@@ -158,6 +268,9 @@ function explainSmtpError(err) {
   const text = raw.toLowerCase();
   const code = err && (err.code || err.responseCode);
 
+  if (/enetunreach|ehostunreach|enetdown|eaddrnotavail/.test(text)) {
+    return 'The relay host resolved to an IPv6 address that this server has no route for. This is normal on hosts with no IPv6 egress (Render\'s free tier, most container platforms). Set SMTP_IPV4_ONLY=true — it is the default — and confirm the server restarts so the resolver patch loads. This is not a credential problem.';
+  }
   if (/535/.test(raw) || /invalid credentials|authentication failed|bad credentials/.test(text)) {
     if (/too many failed login|5\.7\.0/.test(text)) {
       return 'SMTP rejected the login because too many attempts were made from this IP. Wait ~15-30 minutes, or enable 2-Step Verification and regenerate the App Password.';

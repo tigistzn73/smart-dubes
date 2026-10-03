@@ -73,6 +73,11 @@ services:
       # Brand name in the subject and body of every email the app sends.
       - key: APP_NAME
         value: Smart Dube
+      # Render's free tier advertises IPv6 interfaces but has no IPv6 route, so
+      # nodemailer's random pick between the relay's A and AAAA records fails
+      # with ENETUNREACH roughly half the time. Pin the relay to IPv4.
+      - key: SMTP_IPV4_ONLY
+        value: 'true'
       # Render exposes RENDER_EXTERNAL_URL automatically, which is all the
       # letter image URL needs. Set PUBLIC_BASE_URL only to override it.
       - key: PUBLIC_BASE_URL
