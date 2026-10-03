@@ -399,15 +399,17 @@ async function getMe(req, res) {
  */
 async function forgotPassword(req, res) {
   const { phone, email } = req.body;
+  const identifier = String(email || phone || '').trim();
   let user = null;
-  if (email) {
-    const normalizedEmail = String(email).trim().toLowerCase();
+  
+  if (identifier.includes('@')) {
+    const normalizedEmail = identifier.toLowerCase();
     user = await db.get(
-      'SELECT * FROM users WHERE lower(btrim(email)) = $1',
+      'SELECT * FROM users WHERE lower(trim(email)) = $1 OR lower(btrim(email)) = $1',
       [normalizedEmail]
     );
   } else {
-    user = await findUserByPhone(phone);
+    user = await findUserByPhone(identifier);
   }
 
   if (!user) {
