@@ -23,29 +23,45 @@ const dns = require('dns');
 //  IPv4-only SMTP resolution
 // ============================================================
 // nodemailer resolves the relay hostname itself and then picks ONE address at
-// random from the result:
+// random from the combined A + AAAA result:
 //
+//     const addresses = ipv4Addresses.concat(ipv6Addresses);
 //     const host = addresses[Math.floor(Math.random() * addresses.length)];
 //
-// Google publishes A and AAAA records for smtp.gmail.com, so that random pick
-// lands on IPv6 roughly half the time on any host that advertises a non-internal
+// smtp.gmail.com publishes one A record and one AAAA record, so that random
+// pick lands on IPv6 half the time on any host that advertises a non-internal
 // IPv6 interface. A host can advertise IPv6 and still have no route to it --
-// Render's free web services are exactly that shape -- and the send then fails
-// with "connect ENETUNREACH 2607:f8b0:...:587 - Local (:::0)".
+// a Windows box on a link-local-only adapter, Render's free web services, most
+// container platforms -- and the send then fails with
+// "connect ENETUNREACH 2607:f8b0:...:587 - Local (:::0)".
 //
-// That is not merely a Render problem. Even on a healthy dual-stack host every
+// That is not merely a hosting problem. Even on a healthy dual-stack host every
 // individual send is a coin flip, so password-reset delivery fails
 // intermittently for reasons that look like the relay is flaky.
 //
 // Fixing it means removing IPv6 from the candidate list for the SMTP host only.
-// nodemailer exposes no option for this: it calls the global dns.lookup()
-// internally with no injection point, and it filters addresses by comparing the
-// remote family against os.networkInterfaces(), which reports IPv6 as usable on
-// a host that cannot actually route to it.
+// nodemailer exposes no option for this. It has two resolution paths and BOTH
+// have to be intercepted:
 //
-// So dns.lookup is wrapped once, for the configured relay hostnames only, and
-// every other lookup in the process (notably the Postgres pool, which already
-// works via Node's Happy Eyeballs) passes through untouched.
+//   1. Primary: `new dns.Resolver().resolve4()` / `.resolve6()` in
+//      nodemailer's shared resolver. This is the path that actually runs.
+//   2. Fallback: `dns.lookup(host, {all:true})`, only reached when resolve4
+//      and resolve6 both return zero addresses.
+//
+// An earlier version of this file patched only dns.lookup. That patch installed
+// cleanly and logged "Forcing IPv4 for smtp.gmail.com", which made the code look
+// correct while changing nothing: path 1 short-circuits before path 2 is ever
+// reached, so IPv6 stayed in the candidate pool and roughly half of all sends
+// still died on ENETUNREACH.
+//
+// nodemailer also gates path 1 on os.networkInterfaces() -- it keeps IPv6 only
+// if some non-internal IPv6 interface exists -- which reports link-local-only
+// adapters as perfectly usable. So the resolver patch is the only lever.
+//
+// Both wrappers are installed for the configured relay hostnames only, and every
+// other lookup in the process (notably the Postgres pool, which relies on Node's
+// Happy Eyeballs and a Happy Eyeballs-unfriendly IPv6-literal host would break)
+// passes through untouched.
 //
 // On by default because IPv4 reaches every SMTP relay this app supports.
 // Set SMTP_IPV4_ONLY=false to opt out on a network where the relay is genuinely
@@ -65,10 +81,10 @@ function hasUsableIpv4Interface() {
 }
 
 /**
- * Restrict dns.lookup to IPv4 for the given hostnames.
+ * Restrict the relay hostnames to IPv4 on both of nodemailer's DNS paths.
  *
  * @param {string[]} hostnames Relay hostnames to intercept.
- * @returns {boolean} Whether the wrapper is installed.
+ * @returns {boolean} Whether the wrappers were installed.
  */
 function installIpv4OnlyResolver(hostnames) {
   const targets = new Set(hostnames.filter(Boolean).map((h) => String(h).trim().toLowerCase()));
@@ -82,34 +98,63 @@ function installIpv4OnlyResolver(hostnames) {
     console.warn('[EMAIL] No non-internal IPv4 interface found — leaving DNS resolution untouched.');
     return false;
   }
-  if (dns.lookup.__smartDubeIpv4Only) return true;
 
-  const originalLookup = dns.lookup;
+  const isTarget = (hostname) => targets.has(String(hostname || '').toLowerCase());
 
-  dns.lookup = function patchedLookup(hostname, options, callback) {
-    // Support both lookup(host, cb) and lookup(host, opts, cb).
-    let opts = options;
-    let cb = callback;
-    if (typeof opts === 'function') {
-      cb = opts;
-      opts = {};
-    }
-    opts = opts || {};
+  // ---- Path 1: dns.Resolver#resolve6, the one nodemailer actually uses ----
+  // Reporting "this host has no AAAA record" is the only way to express the
+  // intent without reimplementing nodemailer's caching and fallback logic: its
+  // resolver treats an empty list as a legitimate answer and carries on with the
+  // IPv4 addresses alone.
+  if (dns.Resolver && dns.Resolver.prototype.resolve6 && !dns.Resolver.prototype.resolve6.__smartDubeIpv4Only) {
+    const originalResolve6 = dns.Resolver.prototype.resolve6;
 
-    if (!targets.has(String(hostname).toLowerCase())) {
-      return originalLookup.apply(this, arguments);
-    }
+    dns.Resolver.prototype.resolve6 = function patchedResolve6(hostname, options, callback) {
+      const twoArg = typeof options === 'function';
+      if (twoArg) callback = options;
 
-    const wantsAll = !!opts.all;
-    return originalLookup.call(this, hostname, { ...opts, family: 4, all: true }, (err, addresses) => {
-      if (err) return cb(err);
-      // Preserve the callback shape the caller asked for: (err, addresses) with
-      // all:true, or (err, address, family) otherwise. nodemailer uses the former.
-      if (wantsAll) return cb(null, addresses);
-      return cb(null, addresses[0].address, addresses[0].family);
-    });
-  };
-  dns.lookup.__smartDubeIpv4Only = true;
+      if (typeof callback !== 'function' || !isTarget(hostname)) {
+        // resolve6 is a bare alias of queryAaaa, which takes
+        // (hostname, options, callback) with no two-argument overload, so the
+        // caller's short form has to be widened before delegating.
+        if (twoArg) return originalResolve6.call(this, hostname, {}, options);
+        return originalResolve6.apply(this, arguments);
+      }
+
+      return setImmediate(() => callback(null, []));
+    };
+    dns.Resolver.prototype.resolve6.__smartDubeIpv4Only = true;
+  }
+
+  // ---- Path 2: dns.lookup, nodemailer's fallback when resolve4/6 come back empty ----
+  if (!dns.lookup.__smartDubeIpv4Only) {
+    const originalLookup = dns.lookup;
+
+    dns.lookup = function patchedLookup(hostname, options, callback) {
+      // Support both lookup(host, cb) and lookup(host, opts, cb).
+      let opts = options;
+      let cb = callback;
+      if (typeof opts === 'function') {
+        cb = opts;
+        opts = {};
+      }
+      opts = opts || {};
+
+      if (!isTarget(hostname)) {
+        return originalLookup.apply(this, arguments);
+      }
+
+      const wantsAll = !!opts.all;
+      return originalLookup.call(this, hostname, { ...opts, family: 4, all: true }, (err, addresses) => {
+        if (err) return cb(err);
+        // Preserve the callback shape the caller asked for: (err, addresses) with
+        // all:true, or (err, address, family) otherwise. nodemailer uses the former.
+        if (wantsAll) return cb(null, addresses);
+        return cb(null, addresses[0].address, addresses[0].family);
+      });
+    };
+    dns.lookup.__smartDubeIpv4Only = true;
+  }
 
   console.log(`[EMAIL] Forcing IPv4 for ${[...targets].join(', ')} (relay selection is otherwise random).`);
   return true;
@@ -269,7 +314,7 @@ function explainSmtpError(err) {
   const code = err && (err.code || err.responseCode);
 
   if (/enetunreach|ehostunreach|enetdown|eaddrnotavail/.test(text)) {
-    return 'The relay host resolved to an IPv6 address that this server has no route for. This is normal on hosts with no IPv6 egress (Render\'s free tier, most container platforms). Set SMTP_IPV4_ONLY=true — it is the default — and confirm the server restarts so the resolver patch loads. This is not a credential problem.';
+    return 'The relay resolved to an IPv6 address this server has no route for, even though SMTP_IPV4_ONLY=true already strips IPv6 from the candidate list. That means the IPv6 route is absent and something is still handing nodemailer a literal address — check for an SMTP_HOST override, and confirm the process was restarted after the resolver patch was added.';
   }
   if (/535/.test(raw) || /invalid credentials|authentication failed|bad credentials/.test(text)) {
     if (/too many failed login|5\.7\.0/.test(text)) {
@@ -287,7 +332,7 @@ function explainSmtpError(err) {
     return 'The relay is rate-limiting or temporarily refusing connections. Gmail caps a personal mailbox at roughly 500 messages a day; a dedicated transactional provider has a much higher ceiling.';
   }
   if (/etimedout|timeout|getaddrinfo|enotfound|econnrefused|econnreset/.test(text)) {
-    return 'Could not reach the SMTP host. Check SMTP_HOST/SMTP_PORT, and whether this server permits outbound connections on that port.';
+    return 'Could not reach the SMTP host. Check SMTP_HOST/SMTP_PORT, and whether this network permits outbound connections on that port — many ISPs and office firewalls drop 587 and 25, and port 465 (implicit TLS) is usually the one that gets through.';
   }
   if (code === 'EAUTH') {
     return 'SMTP authentication failed. Verify SMTP_USER and that SMTP_PASS is an App Password, not the account password.';
