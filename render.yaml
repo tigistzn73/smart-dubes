@@ -50,15 +50,34 @@ services:
         sync: false
       - key: SMS_GATEWAY_ORDER
         value: twilio,africastalking
-      # Password-reset OTP delivery. Until SMTP_PASS is set here, email runs in
-      # SIMULATION and the API returns the code in its response — which is fine
-      # for testing and a disclosure risk in production. Do not skip it.
+      # Password-reset OTP delivery.
+      #
+      # Free instances cannot use SMTP at all: Render blocks outbound traffic to
+      # ports 25, 465 and 587 on free web services (changelog 2025-09-16, live
+      # 2025-09-26), so every SMTP transport times out here regardless of port or
+      # provider. An HTTPS API on 443 is the only thing that works on a free
+      # instance. Set an API key below to use one; the SMTP_* block is kept so
+      # that a paid instance, where 465 and 587 work again, needs no change.
+      #
+      # Verify EMAIL_FROM against the chosen provider before deploying, or every
+      # send fails with 403 and no customer ever receives a code:
+      #   Resend   — verify the domain and set EMAIL_FROM to a mailbox on it.
+      #   SendGrid — verify the address as a single sender identity, no domain
+      #              needed, which is why it suits a pilot.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: SENDGRID_API_KEY
+        sync: false
+      # Omit to auto-detect from whichever key is set. Set explicitly to force
+      # one transport, e.g. "smtp" to stay on SMTP even with a key present.
+      - key: EMAIL_PROVIDER
+        sync: false
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
-        value: '587'
+        value: '465'
       - key: SMTP_SECURE
-        value: 'false'
+        value: 'true'
       - key: SMTP_USER
         sync: false
       # A Gmail App Password, not the account password.
@@ -73,9 +92,10 @@ services:
       # Brand name in the subject and body of every email the app sends.
       - key: APP_NAME
         value: Smart Dube
-      # Render's free tier advertises IPv6 interfaces but has no IPv6 route, so
-      # nodemailer's random pick between the relay's A and AAAA records fails
-      # with ENETUNREACH roughly half the time. Pin the relay to IPv4.
+      # Only affects the SMTP transport, which is the one that resolves a relay
+      # hostname. Render advertises IPv6 interfaces without a route to them, so
+      # nodemailer's random pick between a relay's A and AAAA records otherwise
+      # fails with ENETUNREACH about half the time.
       - key: SMTP_IPV4_ONLY
         value: 'true'
       # Render exposes RENDER_EXTERNAL_URL automatically, which is all the

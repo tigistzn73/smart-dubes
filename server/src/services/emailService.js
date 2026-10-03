@@ -188,6 +188,56 @@ installIpv4OnlyResolver([
 // overwrites variables that are already set, so calling it again is safe.
 let config = null;
 
+// ============================================================
+//  Transport selection: HTTP API vs SMTP
+// ============================================================
+// SMTP is not always available, and where it is not available no amount of
+// configuration rescues it. Render blocked outbound traffic to ports 25, 465 and
+// 587 on free web services on 2025-09-26 (render.com/changelog/
+// free-web-services-will-no-longer-allow-outbound-traffic-to-smtp-ports), so a
+// service pinned to SMTP there times out on every port and with every provider.
+// What works on a free instance is a paid plan, or an API over 443.
+//
+// Hence two transports behind one interface. The HTTP paths speak 443, which is
+// the one thing a hosting platform does not filter, so they work everywhere SMTP
+// does and in several places it does not.
+//
+// The HTTP provider is chosen over SMTP whenever its API key is present, so
+// moving off SMTP is a matter of setting one variable. EMAIL_PROVIDER overrides
+// that guess; set it to "smtp" to stay on SMTP even when a key is also present.
+const HTTP_PROVIDERS = {
+  resend: {
+    keyVar: 'RESEND_API_KEY',
+    label: 'Resend (HTTPS API)',
+    sendUrl: 'https://api.resend.com/emails',
+    verifyUrl: 'https://api.resend.com/domains',
+    // Resend will not deliver to anyone but the account owner until a sending
+    // domain is verified, so an unverified from-address fails at send time rather
+    // than at boot. Worth saying out loud.
+    hint: 'Resend only delivers to your own address until a sending domain is verified (resend.com/domains). Add smartdube.et, point its SPF and DKIM records at Resend, then set EMAIL_FROM to a mailbox on that domain.'
+  },
+  sendgrid: {
+    keyVar: 'SENDGRID_API_KEY',
+    label: 'SendGrid (HTTPS API)',
+    sendUrl: 'https://api.sendgrid.com/v3/mail/send',
+    verifyUrl: 'https://api.sendgrid.com/v3/scopes',
+    // SendGrid's single-sender verification accepts one from-address with no
+    // domain to own, which is the quickest way to see a message arrive — and the
+    // surest way to have it land in spam afterwards. Worth stating the trap here
+    // because the 403 that stops a send and the DMARC failure that hides a
+    // delivered one look nothing alike.
+    hint: 'SendGrid needs the EMAIL_FROM address verified as a sender identity (sendgrid.com/settings/sender_verification). For anything customer-facing, verify the smartdube.et domain instead of a single Gmail address: mail from a gmail.com From address is signed for sendgrid.net, fails DMARC alignment, and Gmail will put the verification codes in spam. A single sender is fine for testing only.'
+  }
+};
+
+function pickProvider() {
+  const explicit = String(process.env.EMAIL_PROVIDER || '').trim().toLowerCase();
+  if (explicit) return explicit;
+  if (process.env.RESEND_API_KEY && String(process.env.RESEND_API_KEY).trim()) return 'resend';
+  if (process.env.SENDGRID_API_KEY && String(process.env.SENDGRID_API_KEY).trim()) return 'sendgrid';
+  return 'smtp';
+}
+
 function resolveConfig() {
   if (config) return config;
 
@@ -202,16 +252,29 @@ function resolveConfig() {
   const requireTLS = String(process.env.SMTP_REQUIRE_TLS || 'true').toLowerCase() === 'true';
   const appName = (process.env.APP_NAME || 'Smart Dube').trim();
 
+  const provider = pickProvider();
+  const httpProvider = HTTP_PROVIDERS[provider] || null;
+  const apiKey = httpProvider ? String(process.env[httpProvider.keyVar] || '').trim() : '';
+
   // Named rather than a boolean so the boot log can say exactly which variable
-  // is missing. "Email is not configured" on its own sends people hunting
-  // through four settings when the answer is one of them.
+  // is missing. On an HTTP provider the SMTP settings are never read, so
+  // reporting SMTP_HOST/SMTP_USER/SMTP_PASS as the missing pieces would send
+  // someone hunting through settings the service does not consult.
   const missing = [];
-  if (!host) missing.push('SMTP_HOST');
-  if (!user) missing.push('SMTP_USER');
-  if (!pass) missing.push('SMTP_PASS');
-  if (!from) missing.push('EMAIL_FROM');
+  if (httpProvider) {
+    if (!apiKey) missing.push(httpProvider.keyVar);
+    if (!from) missing.push('EMAIL_FROM');
+  } else {
+    if (!host) missing.push('SMTP_HOST');
+    if (!user) missing.push('SMTP_USER');
+    if (!pass) missing.push('SMTP_PASS');
+    if (!from) missing.push('EMAIL_FROM');
+  }
 
   config = {
+    provider,
+    httpProvider,
+    apiKey,
     host,
     port,
     secure,
@@ -246,6 +309,10 @@ function getTransporter() {
 
   const cfg = resolveConfig();
   if (!cfg.configured) return null;
+  // The HTTP providers do not open a socket at all, so there is nothing to pool
+  // and nothing to build. Returning null here keeps every caller on the one
+  // "is there a transporter?" branch instead of testing the provider again.
+  if (cfg.httpProvider) return null;
 
   try {
     transporter = nodemailer.createTransport({
@@ -284,11 +351,25 @@ function getTransporter() {
  * telling the user to check their inbox and disclosing the code inline.
  */
 function isEmailConfigured() {
-  return !!(resolveConfig().configured && getTransporter());
+  const cfg = resolveConfig();
+  if (!cfg.configured) return false;
+  // An HTTP provider has no transporter to construct and no connection to make,
+  // so a present API key is the whole of it.
+  if (cfg.httpProvider) return true;
+  return !!getTransporter();
 }
 
 function describeEmailConfig() {
   const cfg = resolveConfig();
+  if (cfg.httpProvider) {
+    if (cfg.configured) {
+      console.log(`[EMAIL] LIVE mode | from: ${cfg.from} | provider: ${cfg.httpProvider.label} (HTTPS/443)`);
+    } else {
+      console.log(`[EMAIL] SIMULATION mode — password-reset codes are logged and shown on screen, NOT sent.`);
+      console.log(`[EMAIL] Missing: ${cfg.missing.join(', ')}`);
+    }
+    return;
+  }
   if (cfg.configured) {
     console.log(
       `[EMAIL] LIVE mode | from: ${cfg.from} | host: ${cfg.host}:${cfg.port} (secure=${cfg.effectiveSecure})`
@@ -332,7 +413,7 @@ function explainSmtpError(err) {
     return 'The relay is rate-limiting or temporarily refusing connections. Gmail caps a personal mailbox at roughly 500 messages a day; a dedicated transactional provider has a much higher ceiling.';
   }
   if (/etimedout|timeout|getaddrinfo|enotfound|econnrefused|econnreset/.test(text)) {
-    return 'Could not reach the SMTP host. Check SMTP_HOST/SMTP_PORT, and whether this network permits outbound connections on that port — many ISPs and office firewalls drop 587 and 25, and port 465 (implicit TLS) is usually the one that gets through.';
+    return 'Could not reach the SMTP host. Check SMTP_HOST/SMTP_PORT, and whether this network permits outbound connections on that port. Note that Render free instances block 25, 465 and 587 entirely (since 2025-09-26) — switch to an HTTP provider such as Resend or SendGrid, which uses 443, or upgrade to a paid instance.';
   }
   if (code === 'EAUTH') {
     return 'SMTP authentication failed. Verify SMTP_USER and that SMTP_PASS is an App Password, not the account password.';
@@ -342,6 +423,166 @@ function explainSmtpError(err) {
   }
 
   return raw;
+}
+
+/**
+ * Map an HTTP email API's failure onto the same kind of actionable sentence
+ * explainSmtpError produces for SMTP.
+ *
+ * These providers answer with a JSON body rather than a reply code, and their
+ * most common failure — an unverified sender — is a 403 carrying a sentence the
+ * API returns verbatim. Without this the log shows a bare "403 Forbidden" and
+ * the reader has no way to know the fix is a DNS record rather than a code
+ * change.
+ *
+ * @param {number} status HTTP status the provider returned.
+ * @param {string} body   Response body, already read as text.
+ * @param {object} p      Provider descriptor, for its `hint`.
+ */
+function explainHttpApiError(status, body, p) {
+  const text = String(body || '').toLowerCase();
+  const detail = extractProviderMessage(body);
+
+  // Sender verification is tested first and regardless of status. Both providers
+  // use 403 for it, but SendGrid answers 400 to some of these phrasings, and by
+  // a wide margin it is the most common setup mistake — so it must not fall
+  // through to the generic invalid-request branch, whose advice (fix EMAIL_FROM)
+  // is a distraction when the real fix is a DNS record.
+  if (/sending domain|not verified|unverified|sender identity|does not match a verified|only send testing|not allowed to send/.test(text)) {
+    return `The provider refused the message because the from-address is not verified. ${p.hint}`;
+  }
+
+  if (status === 401 || /api key is invalid|invalid api key|unauthorized|forbidden/.test(text)) {
+    return `The provider rejected the API key. Check ${p.keyVar} — it should be the whole key, and on Resend the key must start "re_".`;
+  }
+
+  if (status === 429 || /rate limit|too many requests|sending limit|quota/.test(text)) {
+    return 'The provider is rate-limiting this account. The free tiers are small (SendGrid about 100 messages a day) — a password-reset storm, or a loop of resend clicks, will exhaust them.';
+  }
+
+  if (status === 422 || status === 400) {
+    // Phrased from the exact wording both providers use. A customer with a typo
+    // in the address on file gets a code that never arrives and no explanation,
+    // so this branch has to be recognised to be worth anything.
+    if (/recipient|email address is not valid|invalid email|is not a valid|does not exist|unable to resolve|mailbox not found|unknown user/.test(text)) {
+      return `The provider rejected the recipient address (${detail || 'invalid address'}). The customer should correct the email on their account.`;
+    }
+    return `The provider rejected the request as invalid (${detail || status}). Check that EMAIL_FROM is the exact verified sender and a plain mailbox address — "Smart Dube <a@b.com>" is accepted, but some providers reject the display-name form on this endpoint.`;
+  }
+
+  if (status >= 500) {
+    return `The provider returned ${status}, which is a fault on their side. Nothing to change in the app; retrying is the correct response.`;
+  }
+
+  return detail ? `The provider returned ${status}: ${detail}` : `The provider returned ${status}.`;
+}
+
+/**
+ * Pull the human-readable sentence out of a provider's JSON error body. Both
+ * shapes are handled because the two providers disagree: Resend returns
+ * {"message": "..."} while SendGrid returns {"errors":[{"message":"..."}]}.
+ */
+function extractProviderMessage(body) {
+  const raw = String(body || '');
+  if (!raw) return '';
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.message === 'string') return parsed.message;
+    if (parsed && Array.isArray(parsed.errors) && parsed.errors[0] && typeof parsed.errors[0].message === 'string') {
+      return parsed.errors.map((e) => e.message).join('; ');
+    }
+  } catch {
+    // Not JSON. Providers sometimes return HTML from an edge proxy, and a wall
+    // of markup in the log helps nobody, so fall through to the raw text only
+    // when it is short enough to be a sentence.
+    return raw.length <= 200 ? raw.trim() : '';
+  }
+  return '';
+}
+
+/**
+ * Send one message through an HTTPS email API.
+ *
+ * fetch rather than an SDK: both providers' send endpoints are a single POST
+ * with a bearer token, so a dependency would add supply-chain surface and a
+ * version to track for one request. The API key is never logged and never
+ * included in an error message — a thrown provider body is quoted to the log,
+ * and an accidental echo of the Authorization header there would leak the key
+ * into whatever log aggregator reads it.
+ *
+ * @returns {Promise<{success:boolean, messageId?:string, error?:string, hint?:string}>}
+ */
+async function sendViaHttpApi({ to, subject, text, html }) {
+  const cfg = resolveConfig();
+  const p = cfg.httpProvider;
+  const isResend = cfg.provider === 'resend';
+
+  const body = isResend
+    ? { from: cfg.from, to: [to], subject, text, html }
+    : {
+        personalizations: [{ to: [{ email: to }] }],
+        from: parseFromAddress(cfg.from),
+        subject,
+        content: [
+          { type: 'text/plain', value: text },
+          { type: 'text/html', value: html }
+        ]
+      };
+
+  let res;
+  try {
+    res = await fetch(p.sendUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${cfg.apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body),
+      // Bounded so a hung provider cannot stall a password-reset request. This
+      // replaces nodemailer's connectionTimeout/socketTimeout pair, which have no
+      // equivalent here.
+      signal: AbortSignal.timeout(15000)
+    });
+  } catch (err) {
+    const aborted = err && (err.name === 'TimeoutError' || err.name === 'AbortError');
+    return {
+      success: false,
+      error: aborted ? `Request to ${p.label} timed out after 15s` : `Could not reach ${p.label}: ${err.message}`,
+      hint: aborted
+        ? 'This is an HTTPS call on port 443, so a timeout is not a platform firewall — check the provider status page and any egress proxy on this host.'
+        : 'This is an HTTPS call on port 443. A DNS or connection failure here points at the host network or an egress proxy, not at the provider.'
+    };
+  }
+
+  const raw = await res.text();
+
+  if (!res.ok) {
+    return { success: false, error: `${p.label} returned ${res.status}`, hint: explainHttpApiError(res.status, raw, p) };
+  }
+
+  let messageId = '';
+  try {
+    const parsed = JSON.parse(raw || '{}');
+    messageId = String(parsed.id || parsed.message_id || parsed.headers?.['x-message-id'] || '');
+  } catch {
+    // A 2xx with an unparseable body is still a send; the id is a nicety.
+  }
+
+  console.log(`[EMAIL] Sent via ${p.label} | To: ${to} | MessageId: ${messageId || '(not reported)'}`);
+  return { success: true, messageId: messageId || `${p.label} accepted the message` };
+}
+
+/**
+ * SendGrid wants a bare address in `from` and takes the display name separately.
+ * Accepting "Smart Dube <a@b.com>" in EMAIL_FROM keeps one variable working
+ * across both providers instead of forcing a different value per host.
+ */
+function parseFromAddress(value) {
+  const raw = String(value || '').trim();
+  const angled = raw.match(/^(.*?)<([^>]+)>$/);
+  if (!angled) return { email: raw };
+  const name = angled[1].trim().replace(/^"|"$/g, '');
+  return name ? { name, email: angled[2].trim() } : { email: angled[2].trim() };
 }
 
 /**
@@ -368,6 +609,34 @@ async function verifyEmailConnection() {
       reason: `not_configured (missing ${cfg.missing.join(', ')})`,
       hint: 'Password-reset codes will be shown on screen instead of emailed.'
     };
+  }
+
+  // An HTTP provider has no connection to make, so the equivalent check is a
+  // cheap authenticated GET. It proves the key is live and the host can reach
+  // the provider on 443 — the two things that actually break in deployment —
+  // without spending a send or a domain-verification attempt.
+  if (cfg.httpProvider) {
+    const p = cfg.httpProvider;
+    try {
+      const res = await fetch(p.verifyUrl, {
+        headers: { Authorization: `Bearer ${cfg.apiKey}` },
+        signal: AbortSignal.timeout(15000)
+      });
+      if (res.ok) {
+        console.log(`[EMAIL] ${p.label} reachable and API key accepted — codes will be delivered for real.`);
+        return { ok: true };
+      }
+      const raw = await res.text();
+      const hint = explainHttpApiError(res.status, raw, p);
+      console.error(`[EMAIL] Connection check FAILED: ${hint}`);
+      return { ok: false, reason: `${p.label} returned ${res.status}`, hint };
+    } catch (err) {
+      const aborted = err && (err.name === 'TimeoutError' || err.name === 'AbortError');
+      const reason = aborted ? `request to ${p.label} timed out` : (err.message || 'request failed');
+      const hint = `Could not reach ${p.label} on HTTPS/443. This is not an SMTP-port restriction — check the host's network and any egress proxy.`;
+      console.error(`[EMAIL] Connection check FAILED: ${hint}`);
+      return { ok: false, reason, hint };
+    }
   }
 
   const t = getTransporter();
@@ -400,7 +669,7 @@ async function sendTestEmail(to) {
 
   if (!recipient) return { success: false, error: 'No recipient. Set SMTP_USER or pass one in.' };
   if (!isEmailConfigured()) {
-    return { success: false, simulated: true, error: `SMTP not configured (missing ${cfg.missing.join(', ')})` };
+    return { success: false, simulated: true, error: `Email not configured (missing ${cfg.missing.join(', ')})` };
   }
 
   const token = String(Math.floor(100000 + Math.random() * 900000));
@@ -410,6 +679,15 @@ async function sendTestEmail(to) {
     appName: cfg.appName,
     expiresInMinutes: 5
   });
+
+  if (cfg.httpProvider) {
+    return sendViaHttpApi({
+      to: recipient,
+      subject: `[${cfg.appName}] Delivery test ${token}`,
+      text,
+      html
+    });
+  }
 
   try {
     const info = await transporter.sendMail({
@@ -548,8 +826,21 @@ async function sendOtpEmail({ to, fullName, otpCode, expiresInMinutes = 5 }) {
       success: true,
       simulated: true,
       channel: 'EMAIL',
-      error: `SMTP not configured (missing ${cfg.missing.join(', ')})`
+      error: `Email not configured (missing ${cfg.missing.join(', ')})`
     };
+  }
+
+  if (cfg.httpProvider) {
+    // The HTTP providers answer with a status code rather than nodemailer's
+    // accepted/rejected pair, so recipient rejection surfaces as a failed send.
+    // Same contract as below: a non-2xx is a failure the caller must not report
+    // as delivered, or the customer is told to check an inbox that will stay empty.
+    const sent = await sendViaHttpApi({ to: recipient, subject, text, html });
+    if (!sent.success) {
+      console.error(`[EMAIL] Delivery failed to ${recipient}: ${sent.hint || sent.error}`);
+      return { success: false, simulated: false, channel: 'EMAIL', error: sent.error, hint: sent.hint };
+    }
+    return { success: true, simulated: false, channel: 'EMAIL', messageId: sent.messageId };
   }
 
   try {
@@ -575,8 +866,15 @@ async function sendOtpEmail({ to, fullName, otpCode, expiresInMinutes = 5 }) {
     return { success: true, simulated: false, channel: 'EMAIL', messageId: info.messageId };
   } catch (err) {
     const hint = explainSmtpError(err);
-    console.error(`[EMAIL] Delivery failed to ${recipient}: ${hint}`);
-    return { success: false, simulated: false, channel: 'EMAIL', error: err.message, hint };
+    // Name the relay in the error the API returns, not just in the server log.
+    // "Connection timeout" on its own says nothing about whether the cause is
+    // the port, the firewall or the credentials, and the one thing that settles
+    // it — which host:port was actually dialled — was previously visible only to
+    // whoever had the terminal open. Host and port are public SMTP endpoints, so
+    // this discloses nothing.
+    const target = `${cfg.host}:${cfg.port}`;
+    console.error(`[EMAIL] Delivery failed to ${recipient} via ${target}: ${hint}`);
+    return { success: false, simulated: false, channel: 'EMAIL', error: `${err.message} (${target})`, hint };
   }
 }
 
@@ -587,5 +885,9 @@ module.exports = {
   verifyEmailConnection,
   sendTestEmail,
   buildOtpEmail,
-  explainSmtpError
+  explainSmtpError,
+  // Exported for the diagnostic scripts and the provider tests, which need to
+  // assert on how a failure is described without sending a message.
+  explainHttpApiError,
+  parseFromAddress
 };

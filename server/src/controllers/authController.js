@@ -488,8 +488,12 @@ async function forgotPassword(req, res) {
         [user.id]
       );
       return res.status(503).json({
+        // The relay endpoint is named in `error` because a bare "Connection
+        // timeout" cannot be acted on by whoever reads this. The customer-facing
+        // half stays non-technical: a reset that fails because of a server-side
+        // mail problem is not something they caused or can fix.
         error: delivery && delivery.error
-          ? `We could not send a verification code: ${delivery.error}`
+          ? `We could not send a verification code: ${delivery.error}. This is a problem on our side, not with your account — please try again in a few minutes.`
           : 'We could not send a verification code to your registered email. Please try again in a few minutes.'
       });
     }
