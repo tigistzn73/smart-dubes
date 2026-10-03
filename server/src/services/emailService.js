@@ -654,7 +654,9 @@ async function verifyEmailConnection() {
     // code later. getTransporter() stays usable so the next send retries.
     const hint = explainSmtpError(err);
     console.error(`[EMAIL] Connection check FAILED: ${hint}`);
-    console.error('[EMAIL] Codes will fall back to SMS / on-screen display until this is fixed.');
+    console.error('[EMAIL] Reset codes will NOT be delivered: forgot-password returns 503 and no code is issued.');
+    console.error('[EMAIL] There is no SMS fallback in the reset flow, so reset is fully down while this persists.');
+    console.error('[EMAIL] Diagnose with: npm run diagnose:provider (needs the provider API key locally).');
     return { ok: false, reason: err.message, hint };
   }
 }

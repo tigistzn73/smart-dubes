@@ -141,9 +141,21 @@ async function main() {
   }
 
   // ---- Is EMAIL_FROM actually allowed to send? ---------------------------
+  // Resend's resend.dev is implicitly usable without appearing in the verified
+  // list, but only to the address on the Resend account. Without this branch the
+  // check reports a hard FAILED and sends you off to verify a domain that does
+  // not need verifying — while hiding the restriction that actually matters.
+  const isOnboardingTestDomain =
+    provider === 'resend' && (fromDomain === 'resend.dev' || fromDomain.endsWith('.resend.dev'));
+
   if (fromDomain) {
-    const ok = verified.some((v) => fromDomain === v || fromDomain.endsWith(`.${v}`));
-    if (!verified.length) {
+    const ok = isOnboardingTestDomain || verified.some((v) => fromDomain === v || fromDomain.endsWith(`.${v}`));
+    if (isOnboardingTestDomain) {
+      console.log(`\nTEST-ONLY: ${fromDomain} is Resend's shared onboarding domain.`);
+      console.log('          It needs no verification, but delivers ONLY to the email on your Resend');
+      console.log('          account. Fine for proving the key and integration work — not for customers.');
+      console.log('          So the recipient MUST be the email you signed up to Resend with.');
+    } else if (!verified.length) {
       console.log(`\nFAILED: no verified sending domain on this ${p.label} account.`);
       console.log('        Every send from an unverified address is refused with 403.');
     } else if (!ok) {
