@@ -47,9 +47,16 @@ router.post(
 router.post(
   '/forgot-password',
   [
-    body('phone').notEmpty().withMessage('Phone number is required to receive the verification code'),
+    body('phone').optional(),
+    body('email').optional().isEmail().withMessage('Please provide a valid email address'),
     validateResult
   ],
+  (req, res, next) => {
+    if (!req.body.phone && !req.body.email) {
+      return res.status(400).json({ error: 'Phone number or email is required to receive the verification code' });
+    }
+    next();
+  },
   forgotPassword
 );
 

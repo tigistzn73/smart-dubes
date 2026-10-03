@@ -172,7 +172,7 @@ export const Login = () => {
   const [showRegPassword, setShowRegPassword] = useState(false);
 
   // Forgot Password State
-  const [forgotPhone, setForgotPhone] = useState('+251');
+  const [forgotPhone, setForgotPhone] = useState('');
   // Set only when the server reports that delivery is simulated, i.e. nothing
   // actually left the machine. With real email/SMS configured the code is
   // never available to the browser and has to be typed from the message.
@@ -852,23 +852,23 @@ setError('');
               </h3>
               <p className="text-xs text-slate-400">
                 {t(
-                  'Enter your registered phone number. We will send a 6-digit verification code to the registered email on your account.',
-                  'የተመዘገበውን ስልክ ቁጥር ያስገቡ፣ ወደ ተመዘገበው ኢሜይልዎ 6-አሃድ ማረጋገጫ ኮድ እንልካለን'
+                  'Enter your registered email address. We will send a 6-digit verification code to that email.',
+                  'የተመዘገበውን ኢሜይል ያስገቡ፣ ወደዚያ ኢሜይል 6-አሃድ ማረጋገጫ ኮድ እንልካለን'
                 )}
               </p>
             </div>
 
             <form noValidate onSubmit={handleForgotPassword} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-200 mb-1.5">Registered Phone Number (+251):</label>
+                <label className="block text-xs font-bold text-slate-200 mb-1.5">Registered Email Address:</label>
                 <div className="relative">
-                  <Phone className="w-4 h-4 text-amber-400 absolute left-3.5 top-3.5" />
+                  <Mail className="w-4 h-4 text-amber-400 absolute left-3.5 top-3.5" />
                   <input
-                    type="text"
+                    type="email"
                     value={forgotPhone}
                     onChange={e => setForgotPhone(e.target.value)}
-                    placeholder="+251911..."
-                    className="w-full bg-slate-950/90 border border-slate-700/80 rounded-xl pl-10 pr-4 py-3 text-xs text-slate-100 font-mono font-medium focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 transition-all shadow-inner"
+                    placeholder="you@example.com"
+                    className="w-full bg-slate-950/90 border border-slate-700/80 rounded-xl pl-10 pr-4 py-3 text-xs text-slate-100 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 transition-all shadow-inner"
                     required
                   />
                 </div>

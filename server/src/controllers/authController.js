@@ -398,11 +398,20 @@ async function getMe(req, res) {
  * over a live reset code for any account.
  */
 async function forgotPassword(req, res) {
-  const { phone } = req.body;
-  const user = await findUserByPhone(phone);
+  const { phone, email } = req.body;
+  let user = null;
+  if (email) {
+    const normalizedEmail = String(email).trim().toLowerCase();
+    user = await db.get(
+      'SELECT * FROM users WHERE lower(btrim(email)) = $1',
+      [normalizedEmail]
+    );
+  } else {
+    user = await findUserByPhone(phone);
+  }
 
   if (!user) {
-    return res.status(404).json({ error: 'No account found with this phone number.' });
+    return res.status(404).json({ error: 'No account found with this phone number or email.' });
   }
 
   try {
