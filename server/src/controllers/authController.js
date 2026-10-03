@@ -488,7 +488,9 @@ async function forgotPassword(req, res) {
         [user.id]
       );
       return res.status(503).json({
-        error: 'We could not send a verification code to your registered email. Please try again in a few minutes.'
+        error: delivery && delivery.error
+          ? `We could not send a verification code: ${delivery.error}`
+          : 'We could not send a verification code to your registered email. Please try again in a few minutes.'
       });
     }
 
