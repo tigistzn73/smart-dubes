@@ -460,7 +460,7 @@ async function forgotPassword(req, res) {
     if (hasEmail) {
       delivery = await sendOtpEmail({ to: user.email, fullName: user.full_name, otpCode: resetToken, expiresInMinutes: OTP_TTL_MINUTES });
       channel = 'EMAIL';
-      if (delivery.success) {
+      if (delivery && delivery.success) {
         logAudit({
           userId: user.id,
           actorName: user.full_name,
@@ -481,7 +481,7 @@ async function forgotPassword(req, res) {
       }
 
       console.warn(
-        `[AUTH] Email OTP delivery failed for user ${user.id}: ${delivery.hint || delivery.error || 'not configured'}`
+        `[AUTH] Email OTP delivery failed for user ${user.id}: ${delivery ? (delivery.hint || delivery.error || 'unknown') : 'no delivery result'}`
       );
       await db.run(
         'UPDATE users SET reset_token = NULL, reset_token_expires = NULL, reset_token_sent_at = NULL WHERE id = $1',
