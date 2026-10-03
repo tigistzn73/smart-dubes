@@ -852,8 +852,8 @@ setError('');
               </h3>
               <p className="text-xs text-slate-400">
                 {t(
-                  'Enter your registered phone number. We will send a 6-digit verification code to the email on your account.',
-                  'የተመዝገበውን ስልክ ቁጥር ያስገቡ። 6-አሃድ ማረጋገጫ ኮድ ወደአልክት ላይ ያለውትን ኢሜይል እንልካለን።'
+                  'Enter your registered phone number. We will send a 6-digit verification code to the registered email on your account.',
+                  'የተመዘገበውን ስልክ ቁጥር ያስገቡ፣ ወደ ተመዘገበው ኢሜይልዎ 6-አሃድ ማረጋገጫ ኮድ እንልካለን'
                 )}
               </p>
             </div>

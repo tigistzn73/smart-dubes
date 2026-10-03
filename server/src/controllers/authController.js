@@ -458,14 +458,10 @@ async function forgotPassword(req, res) {
           details: { phone: user.phone, channel: 'EMAIL', simulated: !!delivery.simulated }
         });
 
-        // The code is echoed back ONLY when the mail relay is not configured,
-        // which by definition means nothing was actually delivered. With real
-        // SMTP the response says where to look and nothing more — otherwise the
-        // "verification" step is no verification at all.
         return res.json({
           message: delivery.simulated
             ? `Email delivery is not configured, so your code is shown here instead. Enter ${resetToken} to continue.`
-            : `A 6-digit verification code has been sent to ${maskEmail(user.email)}. It expires in ${OTP_TTL_MINUTES} minutes.`,
+            : `A 6-digit verification code has been sent to your registered email (${maskEmail(user.email)}). It expires in ${OTP_TTL_MINUTES} minutes.`,
           channel: 'EMAIL',
           destination: maskEmail(user.email),
           expiresInMinutes: OTP_TTL_MINUTES,
@@ -473,77 +469,24 @@ async function forgotPassword(req, res) {
         });
       }
 
-      // Email failed or is unconfigured and the code is therefore still usable:
-      // fall through to SMS rather than stranding the user.
       console.warn(
         `[AUTH] Email OTP delivery failed for user ${user.id}: ${delivery.hint || delivery.error || 'not configured'}`
       );
-    }
-
-    // ---- SMS fallback --------------------------------------------------
-    // sms_notifications.customer_id references customer_profiles(id), NOT
-    // users(id). Passing user.id here used to raise a foreign-key violation for
-    // any account whose id happened to sit outside customer_profiles, which
-    // silently discarded the record of the code we had just sent, and where the
-    // id did collide it filed a stranger's reset code in that customer's SMS
-    // history. Resolve the real profile id, and fall back to NULL for the
-    // MERCHANT/ADMIN accounts that legitimately have no customer profile.
-    let customerProfileId = null;
-    try {
-      const profile = await db.get('SELECT id FROM customer_profiles WHERE user_id = $1 LIMIT 1', [user.id]);
-      customerProfileId = profile ? profile.id : null;
-    } catch (lookupErr) {
-      console.warn(`[AUTH] Could not resolve customer_profiles for user ${user.id}: ${lookupErr.message}`);
-    }
-
-    const { sendSMS } = require('../services/smsService');
-    const sms = await sendSMS({
-      customerId: customerProfileId,
-      phone: user.phone,
-      message: `[Smart Dube Security] Your password reset verification code is: ${resetToken}. It expires in ${OTP_TTL_MINUTES} minutes. Do not share it with anyone.`,
-      type: 'REMINDER'
-    });
-
-    if (!sms.success) {
-      // Neither channel worked. The token stays in the database, which is
-      // harmless on its own — it is hashed, single-use and short-lived — so the
-      // honest response is a failure, not a fake success. Clearing the sent_at
-      // too means the customer is not then told to wait out a cooldown for a
-      // code they never received.
       await db.run(
         'UPDATE users SET reset_token = NULL, reset_token_expires = NULL, reset_token_sent_at = NULL WHERE id = $1',
         [user.id]
       );
-
-      logAudit({
-        userId: user.id,
-        actorName: user.full_name,
-        action: 'PASSWORD_RESET_DELIVERY_FAILED',
-        resource: 'AUTH',
-        details: { phone: user.phone, reason: sms.error || 'no channel available' }
-      });
-
       return res.status(503).json({
-        error: 'We could not send a verification code right now. Please try again in a few minutes.'
+        error: 'We could not send a verification code to your registered email. Please try again in a few minutes.'
       });
     }
 
-    logAudit({
-      userId: user.id,
-      actorName: user.full_name,
-      action: 'PASSWORD_RESET_REQUESTED',
-      resource: 'AUTH',
-      details: { phone: user.phone, channel: 'SMS', simulated: !!sms.simulated }
-    });
-
-    return res.json({
-      message: sms.simulated
-        ? `SMS delivery is not configured, so your code is shown here instead. Enter ${resetToken} to continue.`
-        : `A 6-digit verification code has been sent to your phone by SMS. It expires in ${OTP_TTL_MINUTES} minutes.`,
-      channel: 'SMS',
-      destination: maskPhone(user.phone),
-      expiresInMinutes: OTP_TTL_MINUTES,
-      ...(sms.simulated ? { _demoOTP: resetToken } : {})
+    await db.run(
+      'UPDATE users SET reset_token = NULL, reset_token_expires = NULL, reset_token_sent_at = NULL WHERE id = $1',
+      [user.id]
+    );
+    return res.status(400).json({
+      error: 'No email is associated with this account. Please contact support to reset your password.'
     });
   } catch (err) {
     console.error('Forgot Password Error:', err);
