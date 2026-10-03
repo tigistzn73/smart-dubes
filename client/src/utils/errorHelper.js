@@ -67,3 +67,9 @@ export function isValidEthiopianPhone(phone) {
   const cleaned = String(phone).replace(/[\s\-]/g, '');
   return /^(\+251|0)[79]\d{8}$/.test(cleaned);
 }
+
+export function isValidEmail(email) {
+  if (!email) return false;
+  const trimmed = String(email).trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+}

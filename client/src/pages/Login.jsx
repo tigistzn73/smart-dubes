@@ -121,7 +121,7 @@ function rememberPhone(value) {
     // Same reasoning as above: a storage failure must not break sign-in.
   }
 }
-import { getErrorMessage, isValidEthiopianPhone } from '../utils/errorHelper';
+import { getErrorMessage, isValidEthiopianPhone, isValidEmail } from '../utils/errorHelper';
 
 export const Login = () => {
   const { loginWithToken, switchDemoRole, register, forgotPassword, resetPassword } = useAuth();
@@ -361,14 +361,14 @@ export const Login = () => {
     setDemoOTP('');
 
     const trimmedPhone = (forgotPhone || '').trim();
-    if (!trimmedPhone || trimmedPhone === '+251') {
-      setError('Registered phone number is required.');
+    if (!trimmedPhone) {
+      setError('Registered email address is required.');
       setLoading(false);
       return;
     }
 
-    if (!isValidEthiopianPhone(trimmedPhone)) {
-      setError('Please enter a valid Ethiopian phone number (e.g. +251911223344 or 0911223344).');
+    if (!isValidEmail(trimmedPhone)) {
+      setError('Please enter a valid email address.');
       setLoading(false);
       return;
     }
