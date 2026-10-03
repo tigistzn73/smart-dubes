@@ -93,11 +93,13 @@ export const AuthProvider = ({ children }) => {
 
   // Forgot password - request a verification code. It goes to the email
   // captured at registration, or by SMS when the account has no email on file.
-  const forgotPassword = async (phone) => {
+  const forgotPassword = async (identifier) => {
     const res = await fetch('/api/auth/forgot-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone })
+      body: identifier && identifier.includes('@')
+        ? JSON.stringify({ email: identifier })
+        : JSON.stringify({ phone: identifier })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(getErrorMessage(data, 'Failed to send a verification code.'));
