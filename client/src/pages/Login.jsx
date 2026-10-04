@@ -480,9 +480,9 @@ setError('');
     };
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center py-4 px-4 overflow-hidden">
+    <div className="flex-1 flex flex-col items-center py-4 px-4 min-h-0 overflow-y-auto">
 
-      <div className="w-full max-w-md space-y-3.5">
+      <div className="w-full max-w-md space-y-3.5 my-auto">
         {/* Header */}
         <div className="text-center space-y-1">
           <h1 className="text-xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-yellow-400 to-amber-500 bg-clip-text text-transparent">
@@ -608,7 +608,7 @@ setError('');
 
         {/* ======================= REGISTER VIEW ======================= */}
         {authView === 'REGISTER' && (
-          <div className="glass-panel p-7 rounded-2xl border border-slate-700/80 shadow-2xl space-y-5 max-h-[70vh] overflow-y-auto bg-slate-900/90">
+          <div className="glass-panel p-7 rounded-2xl border border-slate-700/80 shadow-2xl space-y-5 bg-slate-900/90">
             <div className="text-center space-y-1">
               <h3 className="text-lg font-extrabold text-slate-100 flex items-center justify-center gap-2">
                 <UserPlus className="w-5 h-5 text-sky-400" />
