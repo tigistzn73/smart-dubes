@@ -1000,6 +1000,28 @@ export const MerchantDashboard = () => {
           </div>
         </div>
 
+        {escalationCases.some(c => c.court_letter_issued && !c.court_letter_sent_at) && (
+          <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold mb-4 animate-fade-in">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0">
+                <AlertTriangle className="w-5 h-5 text-amber-400" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-slate-100">Final Court Letter Issued</h3>
+                <p className="text-[10px] text-slate-300 mt-1">
+                  Merkato Supermarket has issued a formal court letter (Ref: CL-28-20261004) for your overdue Dube of 2000.00 ETB, which passed its due date on 2026-09-25.
+                </p>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  You have 7 days left to settle in full before this is referred to court.
+                </p>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  This letter is already on your page and counts from today. The shop has not yet sent it to you by SMS.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {smsFeedback && (
           <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold flex items-center justify-between animate-fade-in">
             <span className="flex items-center gap-2">
