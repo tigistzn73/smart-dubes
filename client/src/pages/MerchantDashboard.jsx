@@ -754,8 +754,8 @@ export const MerchantDashboard = () => {
 
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col">
-      <div className="flex flex-row gap-1.5 md:gap-3 items-start flex-1 min-h-0">
+    <div className="flex flex-col">
+      <div className="flex flex-row gap-1.5 md:gap-3 items-start">
       {/* MOBILE SIDEBAR DRAWER (FOR PHONES) */}
       {mobileSidebarOpen && (
         <div className="fixed inset-0 z-50 flex md:hidden">
@@ -860,7 +860,7 @@ export const MerchantDashboard = () => {
       )}
 
       {/* LEFT SIDEBAR NAVIGATION (DESKTOP ONLY) */}
-      <aside className={`hidden md:flex ${sidebarCollapsed ? 'w-[68px]' : 'w-60'} flex-shrink-0 glass-panel rounded-2xl p-2 md:p-3 flex-col justify-start border border-slate-800 lg:sticky lg:top-0 lg:h-full lg:max-h-full overflow-y-auto transition-all duration-300`}>
+      <aside className={`hidden md:flex ${sidebarCollapsed ? 'w-[68px]' : 'w-60'} flex-shrink-0 glass-panel rounded-2xl p-2 md:p-3 flex-col justify-start border border-slate-800 lg:sticky lg:top-[52px] lg:max-h-[calc(100vh-56px)] overflow-y-auto transition-all duration-300`}>
         <div className="space-y-3 md:space-y-4 w-full">
           {/* Header Toggle */}
           <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} pb-2 border-b border-slate-850`}>
@@ -974,11 +974,10 @@ export const MerchantDashboard = () => {
       </aside>
 
       {/* RIGHT MAIN CONTENT AREA */}
-      {/* max-h-full, not a hardcoded 100vh minus a guessed header height: the
-          flex chain above already resolves this box to exactly the space under
-          the navbar, so the panel can never be taller than the frame that holds
-          it. That is what keeps the scrollbar reachable. */}
-      <div className="flex-1 w-full space-y-6 lg:max-h-full lg:overflow-y-auto pr-2 pb-20">
+      {/* No height cap and no inner scrollbar here on purpose: this pane grows
+          with its content and the document does the scrolling, so every tab is
+          reachable with the normal window scrollbar. */}
+      <div className="flex-1 w-full space-y-6 pr-2 pb-20">
         {/* Top Banner Stats */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 glass-panel p-4 rounded-xl border border-slate-800/80 shadow-md">
           <div className="flex flex-col gap-1 text-xs">
@@ -2087,10 +2086,10 @@ export const MerchantDashboard = () => {
       {/* ================ SMS COMPOSE MODAL ================ */}
       {smsTarget && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-slate-950/80 backdrop-blur-md">
-          <div className="my-auto glass-panel w-full max-w-lg rounded-2xl border border-slate-700/60 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+          <div className="my-auto glass-panel w-full max-w-lg rounded-2xl border border-slate-700/60 shadow-2xl relative flex flex-col max-h-[90vh]">
 
             {/* Header */}
-            <div className="flex items-center justify-between p-5 border-b border-slate-800">
+            <div className="flex items-center justify-between p-5 border-b border-slate-800 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-sky-500/10 border border-sky-500/30 flex items-center justify-center">
                   <Smartphone className="w-5 h-5 text-sky-400" />
@@ -2105,7 +2104,7 @@ export const MerchantDashboard = () => {
               </button>
             </div>
 
-            <div className="p-5 space-y-4">
+            <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
               {smsSentResult ? (
                 /* ---- SUCCESS VIEW ---- */
                 <div className="space-y-4">

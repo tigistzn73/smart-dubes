@@ -407,8 +407,8 @@ export const CustomerPortal = () => {
   const areaD = pathD ? `${pathD} L ${chartPoints[chartPoints.length - 1].x} ${chartHeight - 20} L ${chartPoints[0].x} ${chartHeight - 20} Z` : '';
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col">
-      <div className="flex flex-row gap-1.5 md:gap-3 items-start flex-1 min-h-0">
+    <div className="flex flex-col">
+      <div className="flex flex-row gap-1.5 md:gap-3 items-start">
         {/* MOBILE SIDEBAR DRAWER (FOR PHONES) */}
         {mobileSidebarOpen && (
           <div className="fixed inset-0 z-50 flex md:hidden">
@@ -488,7 +488,7 @@ export const CustomerPortal = () => {
         )}
 
         {/* LEFT SIDEBAR NAVIGATION (DESKTOP ONLY) */}
-        <aside className={`hidden md:flex ${sidebarCollapsed ? 'w-[68px]' : 'w-60'} flex-shrink-0 glass-panel rounded-2xl p-2 md:p-3 flex-col justify-start border border-slate-800 lg:sticky lg:top-0 lg:h-full lg:max-h-full overflow-y-auto transition-all duration-300`}>
+        <aside className={`hidden md:flex ${sidebarCollapsed ? 'w-[68px]' : 'w-60'} flex-shrink-0 glass-panel rounded-2xl p-2 md:p-3 flex-col justify-start border border-slate-800 lg:sticky lg:top-[52px] lg:max-h-[calc(100vh-56px)] overflow-y-auto transition-all duration-300`}>
           <div className="space-y-3 md:space-y-4 w-full">
             {/* Header Toggle */}
             <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} pb-2 border-b border-slate-850`}>
@@ -552,11 +552,10 @@ export const CustomerPortal = () => {
         </aside>
 
       {/* RIGHT MAIN CONTENT AREA */}
-      {/* max-h-full, not a hardcoded 100vh minus a guessed header height: the
-          flex chain above already resolves this box to exactly the space under
-          the navbar, so the panel can never be taller than the frame that holds
-          it. That is what keeps the scrollbar reachable. */}
-      <div className="flex-1 w-full space-y-6 lg:max-h-full lg:overflow-y-auto pr-2 pb-20">
+      {/* No height cap and no inner scrollbar here on purpose: this pane grows
+          with its content and the document does the scrolling, so every tab is
+          reachable with the normal window scrollbar. */}
+      <div className="flex-1 w-full space-y-6 pr-2 pb-20">
           {/* TAB 1: DASHBOARD HOME */}
           {activeTab === 'DASHBOARD' && (
             <div className="space-y-6">
