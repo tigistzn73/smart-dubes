@@ -448,19 +448,22 @@ async function sendCourtLetter(caseId, options = {}) {
   // The wait is the whole point of the ladder: the letter sat on the customer's
   // page for the full grace period before anyone told them it was there. Refuse
   // early rather than shorten a period they were already given in writing.
+  //
+  // Measured from the due date, so a merchant who sends the warning late cannot
+  // push the customer's total exposure out by the length of their own delay.
   if (!options.allowResend) {
     const graceDays = escalationCase.warning_period_days || WARNING_PERIOD_DAYS;
 
     if (!escalationCase.warning_sent_at) {
-      throw new Error(`An overdue warning must be sent before the court letter can be sent. Wait ${graceDays} days after that.`);
+      throw new Error(`An overdue warning must be sent before the court letter can be sent. Wait ${graceDays} days after the due date.`);
     }
 
-    const elapsed = daysSince(escalationCase.warning_sent_at);
+    const elapsed = daysSince(escalationCase.due_date);
     if (elapsed < graceDays) {
       const remaining = graceDays - elapsed;
       throw new Error(
         `The court letter can be sent in ${remaining} day${remaining === 1 ? '' : 's'}. ` +
-        `The customer must be given the full ${graceDays} day grace period.`
+        `The customer must be given the full ${graceDays} day grace period counted from the due date.`
       );
     }
   }
@@ -848,11 +851,15 @@ async function getEscalationCases(merchantId) {
     const elapsed = daysSince(row.warning_sent_at);
     // Days left before the merchant may notify the customer of the court letter,
     // or null once they have. Zero means the button is now available.
+    //
+    // Counted from the due date, not from the warning SMS. Case 28's warning went
+    // out 10/04 on a debt due 09/28, so a warning-based countdown would hand the
+    // customer seven more days on top of the six they had already been given. The
+    // due date is the single agreed start of the grace period, so a late warning
+    // shortens the wait rather than extending the customer's exposure.
     const daysUntilCourtLetter = row.court_letter_sent_at
       ? null
-      : row.warning_sent_at
-        ? Math.max(0, gracePeriod - elapsed)
-        : gracePeriod;
+      : Math.max(0, gracePeriod - daysSince(row.due_date));
     return {
       ...row,
       amount: parseFloat(row.amount),

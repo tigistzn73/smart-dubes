@@ -15,6 +15,7 @@ import {
   PhoneCall,
   Search,
   Calendar,
+  Clock,
   Lock,
   MessageSquare,
   X,
@@ -151,6 +152,23 @@ export const MerchantDashboard = () => {
   const [smsError, setSmsError] = useState('');
 
   const token = localStorage.getItem('smart_dube_token');
+
+  // The Send Court Letter button is hidden until the grace period is over. The
+  // server counts that period from the due date, so this must too, or the banner
+  // would promise a date the API then refuses.
+  const courtLetterUnlockDate = (ec) => {
+    if (!ec.due_date) return null;
+    const unlock = new Date(ec.due_date);
+    unlock.setDate(unlock.getDate() + (ec.grace_period_days || 7));
+    return unlock.toLocaleDateString();
+  };
+
+  // Card boxes are date-only; the letter detail modal shows the precise timestamp.
+  // due_date is a DATE column with no time component, so it is rendered as a plain
+  // date -- running it through the timestamp formatter would invent a time of day
+  // and, west of UTC, shift it to the previous day.
+  const fullTimestamp = (value) => (value ? new Date(value).toLocaleString() : null);
+  const plainDate = (value) => (value ? String(value).split('T')[0] : null);
 
   useEffect(() => {
     fetchDashboardData();
@@ -539,6 +557,52 @@ export const MerchantDashboard = () => {
   };
 
   const [escalationActionId, setEscalationActionId] = useState(null);
+
+  // Merchant preview of the letter published on the customer's page. The PNG is
+  // fetched with the Authorization header and shown from an object URL, because
+  // an <img src> cannot carry a bearer token, and the signed public URL is the
+  // customer's route to the document rather than the creditor's.
+  const [letterPreview, setLetterPreview] = useState(null);
+  const [letterImageUrl, setLetterImageUrl] = useState('');
+  const [letterImageLoading, setLetterImageLoading] = useState(false);
+  const [letterImageError, setLetterImageError] = useState('');
+  const [letterView, setLetterView] = useState('image');
+
+  const closeLetterPreview = () => {
+    setLetterPreview(null);
+    setLetterImageUrl('');
+    setLetterImageError('');
+  };
+
+  const openLetterPreview = async (ec) => {
+    setLetterPreview(ec);
+    setLetterImageUrl('');
+    setLetterImageError('');
+    setLetterView('image');
+    setLetterImageLoading(true);
+    try {
+      const res = await fetch(`/api/merchant/escalations/${ec.id}/letter.png`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(getErrorMessage(data, 'Could not render the court letter image.'));
+      }
+      const blob = await res.blob();
+      setLetterImageUrl(URL.createObjectURL(blob));
+    } catch (err) {
+      setLetterImageError(getErrorMessage(err));
+    } finally {
+      setLetterImageLoading(false);
+    }
+  };
+
+  // The escalation card shows dates only, to keep the grid tight. This reveals the
+  // exact timestamp behind each one, which is what the merchant needs when they
+  // are reconciling against their own logs.
+  const [letterDates, setLetterDates] = useState(null);
+
+  const closeLetterDates = () => setLetterDates(null);
 
   const handleEscalationAction = async (caseId, action) => {
     setEscalationActionId(caseId + action);
@@ -2014,8 +2078,8 @@ export const MerchantDashboard = () => {
                             `${ec.grace_period_days} ቀናት ጊዜ አልፏል። ደብዳቤው ሙሉ በሙሉ ጊዜ በደንበኛው በገጹ ላይ ነብቷ ሲሆን በኤስኤምኤስ ለመላክ ተዘጋጅቷል።`
                           )
                         : t(
-                            `The court letter is on the customer's Smart Dube page. You can send it to them by SMS in ${ec.days_until_court_letter} day${ec.days_until_court_letter === 1 ? '' : 's'}, once the ${ec.grace_period_days} day grace period is over.`,
-                            `የፍርድ ቤት ደብዳቤው በደንበኛው በገጹ ላይ ይገኛል። በ${ec.grace_period_days} ቀናት ጊዜ ከፍተኗ በኋላ በ${ec.days_until_court_letter} ቀናት በኤስኤምኤስ ማስታወቅ ይችላሉ።`
+                            `The court letter is on the customer's Smart Dube page. The Send Court Letter button appears on ${courtLetterUnlockDate(ec)}, once the ${ec.grace_period_days} day grace period is over.`,
+                            `የፍርድ ቤት ደብዳቤው በደንበኛው በገጹ ላይ ይገኛል። የፍርድ ቤት ደብዳቤ ላክ አዝራር በ${courtLetterUnlockDate(ec)} ይታያል።`
                           )}
                     </p>
                   )}
@@ -2028,24 +2092,42 @@ export const MerchantDashboard = () => {
 
                   {ec.status !== 'RESOLVED' && ec.status !== 'CLOSED' && (
                     <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800">
-                      {ec.court_letter_issued && !ec.court_letter_sent_at && (
+                      {ec.court_letter_issued && (
+                        <>
+                          <button
+                            onClick={() => openLetterPreview(ec)}
+                            title={t(
+                              'Preview the court letter published on the customer page',
+                              'በደንበኛው በገጹ ላይ የተሳለውን የፍርድ ቤት ደብዳቤ ይመልከቱ'
+                            )}
+                            className="px-3 py-2 rounded-xl bg-slate-700/30 hover:bg-slate-700/50 text-slate-200 border border-slate-600/50 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>{t('View Letter', 'ደብዳቤ ይመልከቱ')}</span>
+                          </button>
+                          <button
+                            onClick={() => setLetterDates(ec)}
+                            title={t(
+                              'Show the exact date and time of every step',
+                              'የእያንዳንዱን ደረጃ ትክክለኛ ቀን እና ሰዓት ይመልከቱ'
+                            )}
+                            className="px-3 py-2 rounded-xl bg-slate-700/30 hover:bg-slate-700/50 text-slate-200 border border-slate-600/50 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                          >
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>{t('Date & Time', 'ቀን እና ሰዓት')}</span>
+                          </button>
+                        </>
+                      )}
+                      {ec.court_letter_issued && !ec.court_letter_sent_at && ec.court_letter_can_be_sent && (
                         <button
                           onClick={() => handleEscalationAction(ec.id, 'COURT_LETTER')}
-                          disabled={escalationActionId === ec.id + 'COURT_LETTER' || !ec.court_letter_can_be_sent}
-                          title={!ec.court_letter_can_be_sent
-                            ? t(
-                                `Available in ${ec.days_until_court_letter} day(s), once the ${ec.grace_period_days} day grace period is over.`,
-                                `በ${ec.grace_period_days} ቀናት ጊዜ ከፍተኗ በኋላ በ${ec.days_until_court_letter} ቀናት በኋላ ይሰራል።`
-                              )
-                            : undefined}
+                          disabled={escalationActionId === ec.id + 'COURT_LETTER'}
                           className="px-3 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/30 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-red-600/20"
                         >
                           <ShieldAlert className="w-3.5 h-3.5" />
                           <span>{escalationActionId === ec.id + 'COURT_LETTER'
                             ? t('Sending...', 'በመላክ ላይ...')
-                            : ec.court_letter_can_be_sent
-                            ? t('Send Court Letter', 'የፍርድ ቤት ደብዳቤ ላክ')
-                            : t(`Send Court Letter (in ${ec.days_until_court_letter}d)`, `የፍርድ ቤት ደብዳቤ ላክ (በ${ec.days_until_court_letter}ቀን)`)}</span>
+                            : t('Send Court Letter', 'የፍርድ ቤት ደብዳቤ ላክ')}</span>
                         </button>
                       )}
                       <button
@@ -2083,6 +2165,172 @@ export const MerchantDashboard = () => {
       </div> {/* right main content end */}
       </div> {/* outer sidebar grid wrapper end */}
 
+
+      {/* ================ COURT LETTER PREVIEW (MERCHANT) ================ */}
+      {letterPreview && (
+        <div className="fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto p-4 bg-slate-950/85 backdrop-blur-md" onClick={closeLetterPreview}>
+          <div className="my-auto glass-panel w-full max-w-3xl rounded-2xl border border-slate-700/60 shadow-2xl flex flex-col max-h-[92vh]" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-slate-800 flex items-start justify-between gap-3 shrink-0">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-100 flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-red-400" />
+                  {t('Court Letter Preview', 'የፍርድ ቤት ደብዳቤ ማጠቃለያ')}
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  {t('Ref', 'መለያ')}: <span className="font-mono text-slate-300">{letterPreview.court_letter_ref}</span>
+                  {' · '}
+                  {t('Customer', 'ደንበኛ')}: <span className="text-slate-300">{letterPreview.customer_name}</span>
+                  {' · '}
+                  {t('Amount', 'መጠን')}: <span className="text-slate-300">{parseFloat(letterPreview.amount).toFixed(2)} ETB</span>
+                </p>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  {t('Posted to the customer page', 'በደንበኛው በገጹ ላይ የተሰረደበት')}:{' '}
+                  <span className="font-mono text-slate-400">{fullTimestamp(letterPreview.court_letter_issued_at)}</span>
+                </p>
+              </div>
+              <button
+                onClick={closeLetterPreview}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+                title={t('Close', 'ዝጋ')}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="px-5 pt-3 flex items-center gap-2 shrink-0">
+              <div className="flex rounded-lg overflow-hidden border border-slate-800">
+                <button
+                  onClick={() => setLetterView('image')}
+                  aria-pressed={letterView === 'image'}
+                  className={`px-3 py-1.5 text-[10px] font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                    letterView === 'image'
+                      ? 'bg-red-500/20 text-red-300'
+                      : 'bg-slate-900/60 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {t('Document', 'ሰነድ')}
+                </button>
+                <button
+                  onClick={() => setLetterView('text')}
+                  aria-pressed={letterView === 'text'}
+                  className={`px-3 py-1.5 text-[10px] font-mono font-bold uppercase tracking-wider border-l border-slate-800 transition-colors cursor-pointer ${
+                    letterView === 'text'
+                      ? 'bg-red-500/20 text-red-300'
+                      : 'bg-slate-900/60 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {t('Plain text', 'ጽሑፍ')}
+                </button>
+              </div>
+              {letterView === 'image' && letterImageUrl && (
+                <a
+                  href={letterImageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] font-mono text-slate-500 hover:text-slate-300 underline underline-offset-2"
+                >
+                  {t('Open full size', 'በሙሉ መጠን ክፈት')}
+                </a>
+              )}
+            </div>
+
+            <div className="px-5 py-4 overflow-y-auto flex-1">
+              {letterView === 'image' ? (
+                letterImageLoading ? (
+                  <p className="text-xs text-slate-400 py-6 text-center">{t('Rendering letter...', 'ደብዳቤ በመመለከት ላይ...')}</p>
+                ) : letterImageError ? (
+                  <p className="text-xs text-amber-300 bg-amber-950/30 border border-amber-500/30 rounded-lg p-3">
+                    {letterImageError}
+                  </p>
+                ) : letterImageUrl ? (
+                  <img
+                    src={letterImageUrl}
+                    alt={`Court letter ${letterPreview.court_letter_ref}`}
+                    className="w-full rounded-lg border border-slate-800 bg-white"
+                  />
+                ) : null
+              ) : (
+                <pre className="text-[11px] text-slate-300 font-mono whitespace-pre-wrap break-words bg-slate-950/60 border border-slate-800 rounded-lg p-3">
+                  {letterPreview.court_letter_body || t('No letter text stored.', 'የደብዳቤ ጽሑፍ የለም።')}
+                </pre>
+              )}
+            </div>
+
+            <div className="px-5 py-3.5 border-t border-slate-800 shrink-0">
+              <button
+                onClick={closeLetterPreview}
+                className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-colors cursor-pointer"
+              >
+                {t('Close', 'ዝጋ')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================ COURT LETTER DATE & TIME ================ */}
+      {letterDates && (
+        <div className="fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto p-4 bg-slate-950/85 backdrop-blur-md" onClick={closeLetterDates}>
+          <div className="my-auto glass-panel w-full max-w-lg rounded-2xl border border-slate-700/60 shadow-2xl flex flex-col max-h-[92vh]" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-slate-800 flex items-start justify-between gap-3 shrink-0">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-100 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-slate-300" />
+                  {t('Letter Date & Time', 'የደብዳቤ ቀን እና ሰዓት')}
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-1 font-mono">
+                  {t('Case', 'ጉዳይ')} #{letterDates.id}
+                  {letterDates.court_letter_ref ? ` · ${letterDates.court_letter_ref}` : ''}
+                </p>
+              </div>
+              <button
+                onClick={closeLetterDates}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+                title={t('Close', 'ዝጋ')}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="px-5 py-4 overflow-y-auto flex-1 space-y-2">
+              {[
+                { label: t('Due date', 'የመክፈያ ቀን'), value: plainDate(letterDates.due_date), icon: Calendar },
+                { label: t('Overdue warning sent', 'የመዘግየት ማስጠንቀቂያ ተልኳል'), value: letterDates.warning_sent_at, icon: MessageSquare },
+                { label: t('Court letter issued (on customer page)', 'የፍርድ ቤት ደብዳቤ ተሰርቷል (በደንበኛው በገጹ)'), value: letterDates.court_letter_issued_at, icon: ShieldAlert },
+                { label: t('Customer notified by SMS', 'ደንበኛ በኤስኤምኤስ ተሳውቷል'), value: letterDates.court_letter_sent_at, icon: CheckCircle }
+              ].map((row) => (
+                <div key={row.label} className="flex items-center justify-between gap-3 bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2">
+                  <span className="text-[11px] text-slate-400 flex items-center gap-2 min-w-0">
+                    <row.icon className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">{row.label}</span>
+                  </span>
+                  <span className={`text-[11px] font-mono shrink-0 ${row.value ? 'text-slate-200' : 'text-slate-500'}`}>
+                    {fullTimestamp(row.value) || 'N/A'}
+                  </span>
+                </div>
+              ))}
+
+              {!letterDates.court_letter_sent_at && letterDates.court_letter_issued_at && (
+                <p className="text-[11px] text-amber-300 bg-amber-950/30 border border-amber-500/30 rounded-lg p-2.5">
+                  {t(
+                    `The letter has been on the customer's page since ${fullTimestamp(letterDates.court_letter_issued_at)}. The Send Court Letter button appears on ${courtLetterUnlockDate(letterDates)}.`,
+                    `ደብዳቤው ከ${fullTimestamp(letterDates.court_letter_issued_at)} ጀምሮ በደንበኛው በገጹ ላይ ነው። የፍርድ ቤት ደብዳቤ ላክ አዝራር በ${courtLetterUnlockDate(letterDates)} ይታያል።`
+                  )}
+                </p>
+              )}
+            </div>
+
+            <div className="px-5 py-3.5 border-t border-slate-800 shrink-0">
+              <button
+                onClick={closeLetterDates}
+                className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-colors cursor-pointer"
+              >
+                {t('Close', 'ዝጋ')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ================ SMS COMPOSE MODAL ================ */}
       {smsTarget && (

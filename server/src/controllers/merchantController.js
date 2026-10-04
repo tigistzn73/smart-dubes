@@ -3,6 +3,7 @@ const { evaluateCreditRisk } = require('../services/riskEngine');
 const { sendSMS, getTemplate } = require('../services/smsService');
 const { logAudit } = require('../services/auditService');
 const { approveUploadedReceipt } = require('../services/paymentGatewayService');
+const { renderCourtLetterPng, isImageRenderingAvailable } = require('../services/courtLetterImageService');
 const {
   getEscalationCases: fetchEscalationCases,
   getEscalationCaseById,
@@ -491,6 +492,47 @@ async function getEscalationCases(req, res) {
   }
 }
 
+// Stream the court letter document for a case the merchant owns, so the creditor
+// can see exactly what was published on the customer's page. Rendered on demand
+// from the same stored snapshot the customer reads, rather than handing out the
+// signed public token, so access stays behind the merchant's own session and
+// ownership is re-checked here.
+async function getEscalationLetterImage(req, res) {
+  const { caseId } = req.params;
+
+  try {
+    const merchant = await db.get('SELECT id FROM merchants WHERE user_id = $1', [req.user.id]);
+    if (!merchant) {
+      return res.status(404).json({ error: 'Merchant account not linked.' });
+    }
+
+    const escalationCase = await getEscalationCaseById(caseId, merchant.id);
+    if (!escalationCase) {
+      return res.status(404).json({ error: 'Escalation case not found.' });
+    }
+
+    if (!escalationCase.court_letter_doc) {
+      return res.status(404).json({ error: 'No court letter has been issued for this case yet.' });
+    }
+
+    if (!isImageRenderingAvailable()) {
+      return res.status(503).json({ error: 'Court letter image rendering is unavailable on this server.' });
+    }
+
+    const png = await renderCourtLetterPng(escalationCase.court_letter_doc);
+
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Content-Length', png.length);
+    // A legal notice is immutable once issued, and a signed URL would outlive
+    // this response, so keep it out of shared caches.
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.send(png);
+  } catch (err) {
+    console.error(`[COURT LETTER] Merchant preview render failed for case #${caseId}:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+}
+
 async function triggerEscalationWarning(req, res) {
   const { caseId } = req.body;
 
@@ -646,6 +688,7 @@ module.exports = {
   getMerchantSMSHistory,
   approveRepayment,
   getEscalationCases,
+  getEscalationLetterImage,
   triggerEscalationWarning,
   triggerCourtLetter,
   resolveEscalationCase,
