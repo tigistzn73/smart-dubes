@@ -520,12 +520,12 @@ async function triggerEscalationWarning(req, res) {
     });
 
     res.json({
-      message: 'Warning SMS sent to customer.',
+      message: 'Warning SMS sent to customer. The court letter is now on their Smart Dube page.',
       escalation: result
     });
   } catch (err) {
-    // A warning that clashes with an already-issued court letter is the
-    // merchant's mistake to fix, not a server fault.
+    // A warning that clashes with an already-sent court letter is the merchant's
+    // mistake to fix, not a server fault.
     res.status(409).json({ error: err.message });
   }
 }
@@ -558,15 +558,26 @@ async function triggerCourtLetter(req, res) {
       details: { customerId: escalationCase.customer_id, amount: escalationCase.amount, letterRef: result.letterRef }
     });
 
+    // The letter is on the customer's page either way, so the difference is only
+    // whether they have been told about it. Say so honestly rather than reporting
+    // a send that no gateway accepted.
+    if (!result.delivered) {
+      return res.status(502).json({
+        error: 'The court letter is on the customer page, but the SMS could not be delivered. Please try sending it again.',
+        letterRef: result.letterRef,
+        escalation: result
+      });
+    }
+
     res.json({
-      message: 'Court letter issued. It is now published on the customer\'s Smart Dube page and an SMS notice was sent.',
+      message: 'Court letter sent to the customer by SMS. It has been on their Smart Dube page for the full grace period.',
       letterRef: result.letterRef,
       courtLetter: result.courtLetterBody,
       escalation: result
     });
   } catch (err) {
-    // Refusing to issue a duplicate legal notice is a merchant-correctable
-    // conflict, not a server fault.
+    // Sending a court letter inside the grace period, or sending a second one, is
+    // a merchant-correctable conflict rather than a server fault.
     res.status(409).json({ error: err.message });
   }
 }

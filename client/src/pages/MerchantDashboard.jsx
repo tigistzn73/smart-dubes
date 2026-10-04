@@ -1985,7 +1985,11 @@ export const MerchantDashboard = () => {
                       <span className="text-slate-300 font-bold">{ec.warning_sent_at ? new Date(ec.warning_sent_at).toLocaleDateString() : 'N/A'}</span>
                     </div>
                     <div className="bg-slate-950 p-2 rounded-lg border border-slate-800">
-                      <span className="text-slate-500 text-[10px] block">{t('Court Letter', 'የፍርድ ቤት ደብዳቤ')}</span>
+                      <span className="text-slate-500 text-[10px] block">{t('Letter On Page', 'በገጹ ላይ ያለ ደብዳቤ')}</span>
+                      <span className="text-slate-300 font-bold">{ec.court_letter_issued_at ? new Date(ec.court_letter_issued_at).toLocaleDateString() : 'N/A'}</span>
+                    </div>
+                    <div className="bg-slate-950 p-2 rounded-lg border border-slate-800">
+                      <span className="text-slate-500 text-[10px] block">{t('Court Letter Notified', 'የፍርድ ቤት ደብዳቤ ተልኳል')}</span>
                       <span className="text-slate-300 font-bold">{ec.court_letter_sent_at ? new Date(ec.court_letter_sent_at).toLocaleDateString() : 'N/A'}</span>
                     </div>
                     <div className="bg-slate-950 p-2 rounded-lg border border-slate-800">
@@ -1993,6 +1997,24 @@ export const MerchantDashboard = () => {
                       <span className="text-slate-300 font-bold">{ec.status}</span>
                     </div>
                   </div>
+
+                  {ec.court_letter_issued && !ec.court_letter_sent_at && (
+                    <p className={`text-[11px] rounded-lg border p-2 ${
+                      ec.court_letter_can_be_sent
+                        ? 'bg-red-950/40 border-red-500/30 text-red-300'
+                        : 'bg-amber-950/30 border-amber-500/30 text-amber-300'
+                    }`}>
+                      {ec.court_letter_can_be_sent
+                        ? t(
+                            `The ${ec.grace_period_days} day grace period is over. The letter has been on the customer's page the whole time and is ready to be sent to them by SMS.`,
+                            `${ec.grace_period_days} ቀናት ጊዜ አልፏል። ደብዳቤው ሙሉ በሙሉ ጊዜ በደንበኛው በገጹ ላይ ነብቷ ሲሆን በኤስኤምኤስ ለመላክ ተዘጋጅቷል።`
+                          )
+                        : t(
+                            `The court letter is on the customer's Smart Dube page. You can send it to them by SMS in ${ec.days_until_court_letter} day${ec.days_until_court_letter === 1 ? '' : 's'}, once the ${ec.grace_period_days} day grace period is over.`,
+                            `የፍርድ ቤት ደብዳቤው በደንበኛው በገጹ ላይ ይገኛል። በ${ec.grace_period_days} ቀናት ጊዜ ከፍተኗ በኋላ በ${ec.days_until_court_letter} ቀናት በኤስኤምኤስ ማስታወቅ ይችላሉ።`
+                          )}
+                    </p>
+                  )}
 
                   {ec.notes && (
                     <p className="text-[11px] text-slate-400 italic bg-slate-950/60 p-2 rounded-lg border border-slate-800">
@@ -2002,14 +2024,24 @@ export const MerchantDashboard = () => {
 
                   {ec.status !== 'RESOLVED' && ec.status !== 'CLOSED' && (
                     <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800">
-                      {ec.escalation_type === 'WARNING' && (
+                      {ec.court_letter_issued && !ec.court_letter_sent_at && (
                         <button
                           onClick={() => handleEscalationAction(ec.id, 'COURT_LETTER')}
-                          disabled={escalationActionId === ec.id + 'COURT_LETTER'}
-                          className="px-3 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/30 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                          disabled={escalationActionId === ec.id + 'COURT_LETTER' || !ec.court_letter_can_be_sent}
+                          title={!ec.court_letter_can_be_sent
+                            ? t(
+                                `Available in ${ec.days_until_court_letter} day(s), once the ${ec.grace_period_days} day grace period is over.`,
+                                `በ${ec.grace_period_days} ቀናት ጊዜ ከፍተኗ በኋላ በ${ec.days_until_court_letter} ቀናት በኋላ ይሰራል።`
+                              )
+                            : undefined}
+                          className="px-3 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/30 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-red-600/20"
                         >
                           <ShieldAlert className="w-3.5 h-3.5" />
-                          <span>{escalationActionId === ec.id + 'COURT_LETTER' ? t('Sending...', 'በመላክ ላይ...') : t('Send Court Letter', 'የፍርድ ቤት ደብዳቤ ላክ')}</span>
+                          <span>{escalationActionId === ec.id + 'COURT_LETTER'
+                            ? t('Sending...', 'በመላክ ላይ...')
+                            : ec.court_letter_can_be_sent
+                            ? t('Send Court Letter', 'የፍርድ ቤት ደብዳቤ ላክ')
+                            : t(`Send Court Letter (in ${ec.days_until_court_letter}d)`, `የፍርድ ቤት ደብዳቤ ላክ (በ${ec.days_until_court_letter}ቀን)`)}</span>
                         </button>
                       )}
                       <button

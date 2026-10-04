@@ -58,7 +58,7 @@ router.get('/court-letter/:caseId/:file', async (req, res) => {
   const escalationCase = await db.get(
     `SELECT id, court_letter_ref, court_letter_doc
      FROM escalation_cases
-     WHERE id = $1 AND court_letter_sent_at IS NOT NULL`,
+     WHERE id = $1 AND court_letter_issued_at IS NOT NULL`,
     [caseId]
   );
 

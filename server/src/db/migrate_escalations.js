@@ -29,6 +29,7 @@ async function migrate() {
       court_letter_ref VARCHAR(60),
       court_letter_body TEXT,
       court_letter_doc JSONB,
+      court_letter_issued_at TIMESTAMPTZ,
       court_letter_sent_at TIMESTAMPTZ,
       resolved_at TIMESTAMPTZ,
       notes TEXT,
@@ -44,13 +45,28 @@ async function migrate() {
     ['warning_period_days', 'INT NOT NULL DEFAULT 7'],
     ['court_letter_ref', 'VARCHAR(60)'],
     ['court_letter_body', 'TEXT'],
-    ['court_letter_doc', 'JSONB']
+    ['court_letter_doc', 'JSONB'],
+    ['court_letter_issued_at', 'TIMESTAMPTZ']
   ];
 
   for (const [column, definition] of addedColumns) {
     await db.run(`ALTER TABLE escalation_cases ADD COLUMN IF NOT EXISTS ${column} ${definition}`);
     console.log(`[MIGRATE] escalation_cases.${column} ensured.`);
   }
+
+  // 2b. Backfill the issue timestamp for letters that were issued before the
+  //     column existed. Those letters were published and notified in one step,
+  //     so their issue date is the send date. Without this they would look
+  //     un-published on the customer portal and would be re-issued with a fresh
+  //     reference number, which for a legal notice is not acceptable.
+  const backfilled = await db.run(`
+    UPDATE escalation_cases
+    SET court_letter_issued_at = court_letter_sent_at
+    WHERE court_letter_issued_at IS NULL
+      AND court_letter_sent_at IS NOT NULL
+      AND court_letter_doc IS NOT NULL
+  `);
+  console.log(`[MIGRATE] Backfilled court_letter_issued_at on ${backfilled.rowCount} existing letter(s).`);
 
   // 3. Indexes. The due-date one backs the daily overdue sweep, which would
   //    otherwise full-scan credit_transactions on every run.

@@ -155,11 +155,18 @@ CREATE TABLE IF NOT EXISTS customer_schedules (
 );
 
 -- 10. escalation_cases
--- Debt escalation ladder: a Dube that passes due_date opens a case, the case
--- gets a WARNING, and if it is still unpaid WARNING_PERIOD_DAYS later it is
--- escalated to a COURT_LETTER. court_letter_body / court_letter_ref are a
--- snapshot written once when the letter is issued, so the legal notice the
--- customer was shown cannot change if the store or amount is later edited.
+-- Debt escalation ladder: a Dube that passes due_date opens a case and is both
+-- warned by SMS and issued a court letter, which is published on the customer's
+-- Smart Dube page as an image. The merchant then waits WARNING_PERIOD_DAYS
+-- before the court letter is notified to the customer by SMS/MMS, which they
+-- trigger by hand.
+-- court_letter_body / court_letter_ref are a snapshot written once when the
+-- letter is issued, so the legal notice the customer was shown cannot change if
+-- the store or amount is later edited.
+-- court_letter_issued_at and court_letter_sent_at are deliberately separate:
+-- issued_at is when the letter became visible on the customer's page, sent_at
+-- is when the customer was told about it by SMS. Collapsing the two would make
+-- the grace period unmeasurable, because the period runs from issue to notice.
 CREATE TABLE IF NOT EXISTS escalation_cases (
     id SERIAL PRIMARY KEY,
     customer_id INT NOT NULL REFERENCES customer_profiles(id) ON DELETE CASCADE,
@@ -178,6 +185,11 @@ CREATE TABLE IF NOT EXISTS escalation_cases (
     -- the image shown on the portal can never disagree with the text snapshot,
     -- even if the store name, address or customer phone is edited later.
     court_letter_doc JSONB,
+    -- When the letter was published on the customer's Smart Dube page. Set at
+    -- the same moment as the snapshot above.
+    court_letter_issued_at TIMESTAMPTZ,
+    -- When the court letter was notified to the customer by SMS/MMS, which the
+    -- merchant does only after the warning grace period has run out.
     court_letter_sent_at TIMESTAMPTZ,
     resolved_at TIMESTAMPTZ,
     notes TEXT,

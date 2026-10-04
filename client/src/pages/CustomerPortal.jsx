@@ -290,9 +290,11 @@ export const CustomerPortal = () => {
   const courtLetters = data?.notices || [];
   const activeCourtLetters = courtLetters.filter(n => !n.is_settled);
   const settledCourtLetters = courtLetters.filter(n => n.is_settled);
-  // Each letter grants a fresh grace period counted from the day it was issued.
+  // Each letter grants a fresh grace period counted from the day it reached the
+  // customer's page, which is the day it was issued. Counting from the SMS instead
+  // would silently extend the period by however long the merchant left it.
   const courtLetterDeadline = (n) => {
-    const issued = new Date(n.court_letter_sent_at);
+    const issued = new Date(n.court_letter_issued_at || n.court_letter_sent_at);
     if (Number.isNaN(issued.getTime())) return null;
     issued.setDate(issued.getDate() + (n.grace_days || 7));
     return issued;
@@ -587,6 +589,14 @@ export const CustomerPortal = () => {
                               )
                             : t('Settle in full immediately to avoid legal action.', 'የሕግ እርምጃ እንዳይወሰዱ ወዲያውኑ ሙሉ በሙሉ ይከፍሉ።')}
                         </p>
+                        {!n.notified_by_sms && (
+                          <p className="text-[11px] text-red-200/70">
+                            {t(
+                              'This letter is already on your page and counts from today. The shop has not yet sent it to you by SMS.',
+                              'ይህ ደብዳቤ በዚህ ጊዜ በገጹ ላይ ተቀምጧል። ድሽንግ ጎዳናው እስካሁን በኤስኤምኤስ አልላከውም።'
+                            )}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -1771,7 +1781,12 @@ export const CustomerPortal = () => {
               <div className="mt-3 flex items-center justify-between text-[10px] font-mono text-slate-500">
                 <span>
                   {t('Issued', 'የተሰጠ')}:{' '}
-                  {new Date(openCourtLetter.court_letter_sent_at).toLocaleString()}
+                  {new Date(openCourtLetter.court_letter_issued_at || openCourtLetter.court_letter_sent_at).toLocaleString()}
+                </span>
+                <span>
+                  {openCourtLetter.notified_by_sms
+                    ? t('Notified by SMS', 'በኤስኤምኤስ ተሳውቷል')
+                    : t('Not sent by SMS yet', 'እስካሁን በኤስኤምኤስ አልተላከም')}
                 </span>
                 <span>
                   {t('Final settlement deadline', 'የመጨረሻ ክፍያ ቀን')}:{' '}
