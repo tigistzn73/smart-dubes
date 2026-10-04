@@ -146,7 +146,7 @@ export const Navbar = () => {
           />
 
           {/* Slide-out Panel */}
-          <aside className="relative w-80 max-w-[85vw] bg-slate-900 border-r border-slate-700/80 p-5 flex flex-col justify-between h-full z-[10000] shadow-2xl overflow-y-auto">
+          <aside className="relative w-80 max-w-[85vw] bg-slate-900 border-r border-slate-700/80 p-5 flex flex-col justify-start h-full z-[10000] shadow-2xl overflow-y-auto">
             <div className="space-y-4">
               {/* Header */}
               <div className="flex items-center justify-between pb-3 border-b border-slate-800">
@@ -228,8 +228,11 @@ export const Navbar = () => {
               </div>
             </div>
 
-            {/* Bottom Actions */}
-            <div className="pt-4 border-t border-slate-800 space-y-2">
+            {/* Bottom Actions. mt-auto rather than justify-between on the aside:
+                space-between pushes the first child above the scroll origin when
+                the drawer is shorter than its content, which makes the top of the
+                menu impossible to scroll back to. */}
+            <div className="mt-auto pt-4 border-t border-slate-800 space-y-2">
               <button
                 onClick={() => {
                   toggleFullscreen();

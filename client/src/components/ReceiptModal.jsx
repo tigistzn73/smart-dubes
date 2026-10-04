@@ -9,11 +9,11 @@ export const ReceiptModal = ({ isOpen, onClose, receipt }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-      <div className="glass-panel w-full max-w-sm rounded-2xl border border-slate-700/60 shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-slate-950/80 backdrop-blur-md">
+      <div className="my-auto glass-panel w-full max-w-sm rounded-2xl border border-slate-700/60 shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh]">
         
         {/* Actions Header - Hidden when printing */}
-        <div className="flex items-center justify-between p-4 border-b border-slate-800 print:hidden">
+        <div className="flex items-center justify-between p-4 border-b border-slate-800 print:hidden shrink-0">
           <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-sky-400"></span>
             Digital Receipt
@@ -28,8 +28,10 @@ export const ReceiptModal = ({ isOpen, onClose, receipt }) => {
           </div>
         </div>
 
-        {/* Printable Receipt Body */}
-        <div className="p-6 overflow-y-auto space-y-6 bg-slate-900/40 print:bg-white print:text-black" id="printable-receipt">
+        {/* flex-1 min-h-0: the panel is a capped flex column with overflow-hidden,
+            so the body has to take the leftover height and be the thing that
+            scrolls. Without this the panel clips the receipt instead. */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6 bg-slate-900/40 print:bg-white print:text-black" id="printable-receipt">
           
           <div className="text-center space-y-1">
             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-ethiopia-green via-ethiopia-yellow to-ethiopia-red p-0.5 mx-auto mb-3 shadow-lg flex items-center justify-center print:hidden">

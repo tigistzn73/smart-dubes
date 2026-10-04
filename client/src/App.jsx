@@ -26,7 +26,7 @@ const MainContent = () => {
   const role = (user.role || '').toUpperCase();
 
   return (
-    <div className="w-full p-0 px-0.5 md:px-1 pt-0 flex flex-col lg:flex-1 lg:min-h-0 lg:overflow-hidden">
+    <div className="w-full p-0 px-0.5 md:px-1 pt-0 flex flex-col lg:flex-1 lg:min-h-0">
       {role === 'MERCHANT' && <MerchantDashboard />}
       {role === 'CUSTOMER' && <CustomerPortal />}
       {role === 'ADMIN' && <AdminDashboard />}
@@ -43,7 +43,11 @@ const AppContainer = () => {
   return (
     <div className={`min-h-screen lg:h-screen lg:overflow-hidden ${activeTheme.bgClass} ${activeTheme.id === 'light' ? 'text-slate-900' : 'text-slate-100'} flex flex-col transition-colors duration-500`}>
       <Navbar />
-      <main className="flex flex-col lg:flex-1 lg:min-h-0 lg:overflow-hidden">
+      {/* Below lg this simply grows and the page scrolls. At lg the panels size
+          themselves to the space left under the navbar, so this is a safety net
+          rather than the main scrollbar: if a panel ever outgrows its box, the
+          content is still reachable instead of being clipped by the frame. */}
+      <main className="flex flex-col lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
         <MainContent />
       </main>
     </div>

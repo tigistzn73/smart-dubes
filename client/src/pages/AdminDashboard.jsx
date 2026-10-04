@@ -242,7 +242,7 @@ export const AdminDashboard = () => {
               className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity"
               onClick={() => setMobileSidebarOpen(false)}
             />
-            <aside className="relative w-72 max-w-[85vw] bg-slate-900 border-r border-slate-800 p-4 flex flex-col justify-between h-full z-50 shadow-2xl overflow-y-auto">
+            <aside className="relative w-72 max-w-[85vw] bg-slate-900 border-r border-slate-800 p-4 flex flex-col justify-start h-full z-50 shadow-2xl overflow-y-auto">
               <div className="space-y-4">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                   <div className="flex items-center gap-2">
@@ -302,7 +302,7 @@ export const AdminDashboard = () => {
                 </nav>
               </div>
 
-              <div className="pt-4 border-t border-slate-800 text-[10px] text-slate-500 text-center">
+              <div className="mt-auto pt-4 border-t border-slate-800 text-[10px] text-slate-500 text-center">
                 Smart Dube Administration • Production
               </div>
             </aside>
@@ -310,7 +310,7 @@ export const AdminDashboard = () => {
         )}
 
         {/* LEFT SIDEBAR NAVIGATION (DESKTOP ONLY) */}
-        <aside className={`hidden md:flex ${sidebarCollapsed ? 'w-[68px]' : 'w-60'} flex-shrink-0 glass-panel rounded-2xl p-2 md:p-3 flex-col justify-between border border-slate-800 sticky top-[52px] h-[calc(100vh-56px)] overflow-y-auto transition-all duration-300`}>
+        <aside className={`hidden md:flex ${sidebarCollapsed ? 'w-[68px]' : 'w-60'} flex-shrink-0 glass-panel rounded-2xl p-2 md:p-3 flex-col justify-start border border-slate-800 lg:sticky lg:top-0 lg:h-full lg:max-h-full overflow-y-auto transition-all duration-300`}>
           <div className="space-y-3 md:space-y-4 w-full">
             {/* Header Toggle */}
             <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} pb-2 border-b border-slate-850`}>
@@ -388,8 +388,12 @@ export const AdminDashboard = () => {
           </div>
         </aside>
 
-        {/* RIGHT MAIN CONTENT AREA */}
-        <div className="flex-1 w-full space-y-6 lg:max-h-[calc(100vh-160px)] lg:overflow-y-auto pr-2 pb-20">
+      {/* RIGHT MAIN CONTENT AREA */}
+      {/* max-h-full, not a hardcoded 100vh minus a guessed header height: the
+          flex chain above already resolves this box to exactly the space under
+          the navbar, so the panel can never be taller than the frame that holds
+          it. That is what keeps the scrollbar reachable. */}
+      <div className="flex-1 w-full space-y-6 lg:max-h-full lg:overflow-y-auto pr-2 pb-20">
           {/* Top Banner Card for Admin */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 glass-panel p-4 rounded-xl border border-slate-800/80 shadow-md">
             <div className="flex flex-col gap-1 text-xs">

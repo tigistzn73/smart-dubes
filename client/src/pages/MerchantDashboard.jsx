@@ -763,7 +763,7 @@ export const MerchantDashboard = () => {
             className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity"
             onClick={() => setMobileSidebarOpen(false)}
           />
-          <aside className="relative w-72 max-w-[85vw] bg-slate-900 border-r border-slate-800 p-4 flex flex-col justify-between h-full z-50 shadow-2xl overflow-y-auto">
+          <aside className="relative w-72 max-w-[85vw] bg-slate-900 border-r border-slate-800 p-4 flex flex-col justify-start h-full z-50 shadow-2xl overflow-y-auto">
             <div className="space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                 <div className="flex items-center gap-2">
@@ -852,7 +852,7 @@ export const MerchantDashboard = () => {
               </nav>
             </div>
 
-            <div className="pt-4 border-t border-slate-800 text-[10px] text-slate-500 text-center">
+            <div className="mt-auto pt-4 border-t border-slate-800 text-[10px] text-slate-500 text-center">
               Smart Dube Merchant • Ethiopian BNPL
             </div>
           </aside>
@@ -860,7 +860,7 @@ export const MerchantDashboard = () => {
       )}
 
       {/* LEFT SIDEBAR NAVIGATION (DESKTOP ONLY) */}
-      <aside className={`hidden md:flex ${sidebarCollapsed ? 'w-[68px]' : 'w-60'} flex-shrink-0 glass-panel rounded-2xl p-2 md:p-3 flex-col justify-between border border-slate-800 sticky top-[52px] h-[calc(100vh-56px)] overflow-y-auto transition-all duration-300`}>
+      <aside className={`hidden md:flex ${sidebarCollapsed ? 'w-[68px]' : 'w-60'} flex-shrink-0 glass-panel rounded-2xl p-2 md:p-3 flex-col justify-start border border-slate-800 lg:sticky lg:top-0 lg:h-full lg:max-h-full overflow-y-auto transition-all duration-300`}>
         <div className="space-y-3 md:space-y-4 w-full">
           {/* Header Toggle */}
           <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} pb-2 border-b border-slate-850`}>
@@ -974,7 +974,11 @@ export const MerchantDashboard = () => {
       </aside>
 
       {/* RIGHT MAIN CONTENT AREA */}
-      <div className="flex-1 w-full space-y-6 lg:max-h-[calc(100vh-160px)] lg:overflow-y-auto pr-2 pb-20">
+      {/* max-h-full, not a hardcoded 100vh minus a guessed header height: the
+          flex chain above already resolves this box to exactly the space under
+          the navbar, so the panel can never be taller than the frame that holds
+          it. That is what keeps the scrollbar reachable. */}
+      <div className="flex-1 w-full space-y-6 lg:max-h-full lg:overflow-y-auto pr-2 pb-20">
         {/* Top Banner Stats */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 glass-panel p-4 rounded-xl border border-slate-800/80 shadow-md">
           <div className="flex flex-col gap-1 text-xs">
@@ -2082,8 +2086,8 @@ export const MerchantDashboard = () => {
 
       {/* ================ SMS COMPOSE MODAL ================ */}
       {smsTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-          <div className="glass-panel w-full max-w-lg rounded-2xl border border-slate-700/60 shadow-2xl relative overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-slate-950/80 backdrop-blur-md">
+          <div className="my-auto glass-panel w-full max-w-lg rounded-2xl border border-slate-700/60 shadow-2xl relative max-h-[90vh] overflow-y-auto">
 
             {/* Header */}
             <div className="flex items-center justify-between p-5 border-b border-slate-800">
@@ -2286,9 +2290,9 @@ export const MerchantDashboard = () => {
 
       {/* VIEW DUBE ITEMS & BALANCE BREAKDOWN MODAL */}
       {limitModalCustomer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setLimitModalCustomer(null)} />
-          <div className="relative glass-card rounded-2xl border border-slate-700 w-full max-w-md p-5 space-y-4">
+          <div className="my-auto relative glass-card rounded-2xl border border-slate-700 w-full max-w-md p-5 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="font-bold text-slate-100 text-sm">{t('Manage Credit Limit', 'የክሬዲት ወሰን አስተዳድር')}</h3>
@@ -2387,8 +2391,8 @@ export const MerchantDashboard = () => {
       )}
 
       {itemsModalCustomer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-          <div className="glass-panel w-full max-w-2xl rounded-2xl border border-slate-800 p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-slate-950/80 backdrop-blur-md">
+          <div className="my-auto glass-panel w-full max-w-2xl rounded-2xl border border-slate-800 p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
               <div className="flex items-center gap-3">
@@ -2542,8 +2546,8 @@ export const MerchantDashboard = () => {
       )}
       {/* FULL RECEIPT IMAGE ZOOM PREVIEW MODAL */}
       {previewImage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
-          <div className="relative max-w-3xl w-full p-2 bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-slate-950/90 backdrop-blur-md">
+          <div className="my-auto relative max-w-3xl w-full p-2 bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl">
             <button
               onClick={() => setPreviewImage(null)}
               className="absolute -top-3 -right-3 w-8 h-8 bg-red-600 hover:bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-10 cursor-pointer"
@@ -2561,10 +2565,10 @@ export const MerchantDashboard = () => {
 
       {/* MERCHANT INBOX ALERTS & NOTIFICATIONS MODAL */}
       {alertsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-          <div className="glass-panel w-full max-w-xl rounded-2xl border border-slate-800 p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-slate-950/80 backdrop-blur-md">
+          <div className="my-auto glass-panel w-full max-w-xl rounded-2xl border border-slate-800 p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
                   <Bell className="w-5 h-5" />
