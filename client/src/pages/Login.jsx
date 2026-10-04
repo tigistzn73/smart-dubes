@@ -912,13 +912,10 @@ setError('');
               </button>
             </form>
 
-            <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+            <div className="flex items-center pt-2 border-t border-slate-800">
               <button onClick={() => switchView('SIGN_IN')} className="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1 font-bold transition-colors">
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Back to Sign In</span>
-              </button>
-              <button onClick={() => switchView('RESET_PASSWORD')} className="text-xs text-sky-400 hover:text-sky-300 font-extrabold hover:underline transition-colors">
-                Already have OTP code?
               </button>
             </div>
           </div>
