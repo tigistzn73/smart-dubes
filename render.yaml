@@ -59,19 +59,32 @@ services:
       # instance. Set an API key below to use one; the SMTP_* block is kept so
       # that a paid instance, where 465 and 587 work again, needs no change.
       #
-      # Verify EMAIL_FROM against the chosen provider before deploying, or every
-      # send fails with 403 and no customer ever receives a code:
-      #   Resend   — verify the domain and set EMAIL_FROM to a mailbox on it.
-      #   SendGrid — verify the address as a single sender identity, no domain
-      #              needed, which is why it suits a pilot.
+      # All three send over 443, which Render does not block. The difference is what
+      # they require of EMAIL_FROM:
+      #   Brevo   — confirms a single from-address by emailing it. No domain needed.
+      #             This is the only one that works on a free instance.
+      #   Resend  — requires a verified sending domain, so DNS access is mandatory.
+      #   SendGrid— accepts a single sender identity, no domain needed, but a consumer
+      #             gmail.com address has no sending reputation with an ESP.
+      #
+      # Verify EMAIL_FROM against the chosen provider before deploying, or every send
+      # fails with 403 and no customer ever receives a code.
+      - key: EMAIL_PROVIDER
+        sync: false
+      - key: BREVO_API_KEY
+        sync: false
       - key: RESEND_API_KEY
         sync: false
       - key: SENDGRID_API_KEY
         sync: false
-      # Omit to auto-detect from whichever key is set. Set explicitly to force
-      # one transport, e.g. "smtp" to stay on SMTP even with a key present.
-      - key: EMAIL_PROVIDER
-        sync: false
+      # Deliberately left unset here, and never to be set. Returning a reset code
+      # in the HTTP response is an account-takeover oracle, because
+      # POST /api/auth/forgot-password is unauthenticated: anyone who knows a phone
+      # number could request that account's code and read it. Useful for local
+      # development only. The service also refuses it outright when RENDER is set,
+      # so copying this flag here would not take effect anyway.
+      # - key: EXPOSE_OTP_IN_RESPONSE
+      #   sync: false
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT

@@ -221,12 +221,31 @@ const HTTP_PROVIDERS = {
     label: 'SendGrid (HTTPS API)',
     sendUrl: 'https://api.sendgrid.com/v3/mail/send',
     verifyUrl: 'https://api.sendgrid.com/v3/scopes',
-    // SendGrid's single-sender verification accepts one from-address with no
-    // domain to own, which is the quickest way to see a message arrive — and the
-    // surest way to have it land in spam afterwards. Worth stating the trap here
-    // because the 403 that stops a send and the DMARC failure that hides a
-    // delivered one look nothing alike.
-    hint: 'SendGrid needs the EMAIL_FROM address verified as a sender identity (sendgrid.com/settings/sender_verification). For anything customer-facing, verify the smartdube.et domain instead of a single Gmail address: mail from a gmail.com From address is signed for sendgrid.net, fails DMARC alignment, and Gmail will put the verification codes in spam. A single sender is fine for testing only.'
+    // SendGrid's single-sender verification accepts one from-address with no domain
+    // to own, which is the quickest way to see a message arrive. Worth stating the
+    // trade-off: gmail.com publishes DMARC p=none, so a misaligned send is not
+    // rejected on DMARC grounds — but an ESP sending as a consumer gmail.com
+    // address is an unusual pattern that still costs reputation, and Google can
+    // suspend an address that repeatedly sends through third-party infrastructure.
+    hint: 'SendGrid needs the EMAIL_FROM address verified as a sender identity (sendgrid.com/settings/sender_verification). No domain is required. Be aware that a single consumer gmail.com address gains no sending reputation: it delivers, but through a provider it is not aligned with, so expect some spam placement.'
+  },
+  brevo: {
+    keyVar: 'BREVO_API_KEY',
+    label: 'Brevo (HTTPS API)',
+    sendUrl: 'https://api.brevo.com/v3/smtp/email',
+    // The sender list, not /account: it answers the question that actually stops a
+    // send here — whether this EMAIL_FROM is one of the verified senders.
+    verifyUrl: 'https://api.brevo.com/v3/senders',
+    // The probe returns the sender list, so the boot check can confirm EMAIL_FROM is
+    // among the confirmed senders rather than only that the key is live.
+    verifyListsSenders: true,
+    // Brevo authenticates with an `api-key` header, not `Authorization: Bearer`.
+    authStyle: 'api-key',
+    // The one provider that needs no domain. Brevo verifies a single from-address by
+    // emailing a confirmation link to it, so a plain Gmail account is enough. That
+    // matters here because the alternatives all demand DNS access the app does not
+    // have, and because 443 is not blocked by the Render free tier.
+    hint: 'Brevo needs EMAIL_FROM added as a sender and confirmed via the link Brevo emails to it (brevo.com/settings/senders). No domain is required. The free plan allows 300 sends a day.'
   }
 };
 
@@ -235,6 +254,7 @@ function pickProvider() {
   if (explicit) return explicit;
   if (process.env.RESEND_API_KEY && String(process.env.RESEND_API_KEY).trim()) return 'resend';
   if (process.env.SENDGRID_API_KEY && String(process.env.SENDGRID_API_KEY).trim()) return 'sendgrid';
+  if (process.env.BREVO_API_KEY && String(process.env.BREVO_API_KEY).trim()) return 'brevo';
   return 'smtp';
 }
 
@@ -359,6 +379,37 @@ function isEmailConfigured() {
   return !!getTransporter();
 }
 
+/** True when running on a managed Render instance, which sets both of these. */
+function isHostedOnRender() {
+  return String(process.env.RENDER || '').toLowerCase() === 'true' || !!process.env.RENDER_EXTERNAL_URL;
+}
+
+/**
+ * Whether a reset code may be returned in the HTTP response.
+ *
+ * This is opt-in and defaults to false. POST /api/auth/forgot-password requires no
+ * authentication: it takes a phone number or email and sends a code to whoever owns
+ * it. So any response that contains the code is an account-takeover oracle for every
+ * address the caller can guess. A customer only ever sees their own code, but the
+ * endpoint does not know that — it cannot tell an owner's request from a stranger's.
+ *
+ * That makes simulation mode safe locally and unsafe in production, and the two are
+ * not distinguished by NODE_ENV anywhere in this codebase. Hence the explicit flag,
+ * plus a refusal on Render in case the flag is ever copied there by accident.
+ */
+function canExposeOtpInResponse() {
+  const requested = String(process.env.EXPOSE_OTP_IN_RESPONSE || '').trim().toLowerCase() === 'true';
+  if (!requested) return false;
+  if (isHostedOnRender()) {
+    console.error(
+      '[EMAIL] REFUSING to return reset codes in responses: EXPOSE_OTP_IN_RESPONSE is set on a hosted Render instance.'
+    );
+    console.error('[EMAIL] An unauthenticated caller who knows a phone number could read that user\'s reset code.');
+    return false;
+  }
+  return true;
+}
+
 function describeEmailConfig() {
   const cfg = resolveConfig();
   if (cfg.httpProvider) {
@@ -448,15 +499,15 @@ function explainHttpApiError(status, body, p) {
   // a wide margin it is the most common setup mistake — so it must not fall
   // through to the generic invalid-request branch, whose advice (fix EMAIL_FROM)
   // is a distraction when the real fix is a DNS record.
-  if (/sending domain|not verified|unverified|sender identity|does not match a verified|only send testing|not allowed to send/.test(text)) {
+  if (/sending domain|not verified|unverified|sender identity|does not match a verified|only send testing|not allowed to send|invalid sender|unrecognized sender|sender.{0,20}not (registered|confirmed)|no sender/.test(text)) {
     return `The provider refused the message because the from-address is not verified. ${p.hint}`;
   }
 
-  if (status === 401 || /api key is invalid|invalid api key|unauthorized|forbidden/.test(text)) {
+  if (status === 401 || /api key is invalid|invalid api key|unauthorized|forbidden|key not found|api-key not found/.test(text)) {
     return `The provider rejected the API key. Check ${p.keyVar} — it should be the whole key, and on Resend the key must start "re_".`;
   }
 
-  if (status === 429 || /rate limit|too many requests|sending limit|quota/.test(text)) {
+  if (status === 429 || status === 402 || /rate limit|too many requests|sending limit|quota|not_enough_credits/.test(text)) {
     return 'The provider is rate-limiting this account. The free tiers are small (SendGrid about 100 messages a day) — a password-reset storm, or a loop of resend clicks, will exhaust them.';
   }
 
@@ -515,26 +566,44 @@ function extractProviderMessage(body) {
 async function sendViaHttpApi({ to, subject, text, html }) {
   const cfg = resolveConfig();
   const p = cfg.httpProvider;
-  const isResend = cfg.provider === 'resend';
 
-  const body = isResend
-    ? { from: cfg.from, to: [to], subject, text, html }
-    : {
-        personalizations: [{ to: [{ email: to }] }],
-        from: parseFromAddress(cfg.from),
-        subject,
-        content: [
-          { type: 'text/plain', value: text },
-          { type: 'text/html', value: html }
-        ]
-      };
+  let body;
+  if (cfg.provider === 'resend') {
+    body = { from: cfg.from, to: [to], subject, text, html };
+  } else if (cfg.provider === 'brevo') {
+    // Brevo takes the display name as its own field and ignores one embedded in the
+    // address, so the address is parsed rather than passed through whole.
+    const sender = parseFromAddress(cfg.from);
+    body = {
+      sender: { name: sender.name || cfg.appName, email: sender.email },
+      to: [{ email: to }],
+      subject,
+      textContent: text,
+      htmlContent: html
+    };
+  } else {
+    body = {
+      personalizations: [{ to: [{ email: to }] }],
+      from: parseFromAddress(cfg.from),
+      subject,
+      content: [
+        { type: 'text/plain', value: text },
+        { type: 'text/html', value: html }
+      ]
+    };
+  }
+
+  const authHeaders =
+    p.authStyle === 'api-key'
+      ? { 'api-key': cfg.apiKey }
+      : { Authorization: `Bearer ${cfg.apiKey}` };
 
   let res;
   try {
     res = await fetch(p.sendUrl, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${cfg.apiKey}`,
+        ...authHeaders,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(body),
@@ -563,7 +632,8 @@ async function sendViaHttpApi({ to, subject, text, html }) {
   let messageId = '';
   try {
     const parsed = JSON.parse(raw || '{}');
-    messageId = String(parsed.id || parsed.message_id || parsed.headers?.['x-message-id'] || '');
+    // Resend returns id, Brevo returns messageId, SendGrid returns a header.
+    messageId = String(parsed.messageId || parsed.id || parsed.message_id || parsed.headers?.['x-message-id'] || '');
   } catch {
     // A 2xx with an unparseable body is still a send; the id is a nicety.
   }
@@ -583,6 +653,59 @@ function parseFromAddress(value) {
   if (!angled) return { email: raw };
   const name = angled[1].trim().replace(/^"|"$/g, '');
   return name ? { name, email: angled[2].trim() } : { email: angled[2].trim() };
+}
+
+/**
+ * Confirm EMAIL_FROM is a sender the provider will actually accept.
+ *
+ * A 200 from the probe only proves the API key is live. The send fails separately,
+ * with a 403, when the from-address is not a confirmed sender — and that failure
+ * lands on a customer rather than on whoever changed the config.
+ *
+ * @param {string} from the configured EMAIL_FROM, display name and all
+ * @param {string} raw  the probe response body
+ * @param {object} p    the provider definition
+ */
+function checkSenderListed(from, raw, p) {
+  const want = (parseFromAddress(from).email || '').toLowerCase();
+  let senders = [];
+  try {
+    const parsed = JSON.parse(raw || '[]');
+    // Brevo returns a bare array of senders. `active` is the difference between
+    // registered and confirmed, so a sender that is present but inactive is a
+    // distinct failure with a distinct fix.
+    senders = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.data) ? parsed.data : [];
+  } catch {
+    // Unparseable body: let the first send decide rather than block startup.
+    return { ok: true };
+  }
+
+  if (!senders.length) {
+    return {
+      ok: false,
+      reason: 'no senders registered',
+      hint: `This ${p.label} account has no sender registered. Add ${want || 'your address'} under the provider's sender settings and confirm it via the email they send.`
+    };
+  }
+
+  const active = senders.filter((s) => s.active !== false);
+  if (active.some((s) => String(s.email || '').toLowerCase() === want)) return { ok: true };
+
+  const listed = senders.some((s) => String(s.email || '').toLowerCase() === want);
+  if (listed) {
+    return {
+      ok: false,
+      reason: 'sender registered but unconfirmed',
+      hint: `${want} is registered but not yet confirmed. Open the confirmation email sent to that address and confirm it, then redeploy. Sends are refused until then.`
+    };
+  }
+
+  const confirmedList = active.map((s) => s.email).filter(Boolean).join(', ') || '(none)';
+  return {
+    ok: false,
+    reason: 'sender not registered',
+    hint: `EMAIL_FROM is ${want || '(unset)'}, which is not a confirmed sender on this account. Confirmed senders: ${confirmedList}. Register ${want || 'your address'} and confirm it, or point EMAIL_FROM at one already confirmed.`
+  };
 }
 
 /**
@@ -617,16 +740,30 @@ async function verifyEmailConnection() {
   // without spending a send or a domain-verification attempt.
   if (cfg.httpProvider) {
     const p = cfg.httpProvider;
+    const verifyHeaders =
+      p.authStyle === 'api-key' ? { 'api-key': cfg.apiKey } : { Authorization: `Bearer ${cfg.apiKey}` };
     try {
       const res = await fetch(p.verifyUrl, {
-        headers: { Authorization: `Bearer ${cfg.apiKey}` },
+        headers: verifyHeaders,
         signal: AbortSignal.timeout(15000)
       });
+      const raw = await res.text();
+
       if (res.ok) {
+        // A live key is not sufficient. Every one of these providers refuses to send
+        // from an unverified address, so a key-only check reports "connected" right
+        // up until a customer presses reset. When the probe returns the sender list,
+        // read it and confirm the configured from-address is actually usable.
+        if (p.verifyListsSenders) {
+          const verdict = checkSenderListed(cfg.from, raw, p);
+          if (!verdict.ok) {
+            console.error(`[EMAIL] Connection check FAILED: ${verdict.hint}`);
+            return { ok: false, reason: verdict.reason, hint: verdict.hint };
+          }
+        }
         console.log(`[EMAIL] ${p.label} reachable and API key accepted — codes will be delivered for real.`);
         return { ok: true };
       }
-      const raw = await res.text();
       const hint = explainHttpApiError(res.status, raw, p);
       console.error(`[EMAIL] Connection check FAILED: ${hint}`);
       return { ok: false, reason: `${p.label} returned ${res.status}`, hint };
@@ -883,6 +1020,7 @@ async function sendOtpEmail({ to, fullName, otpCode, expiresInMinutes = 5 }) {
 module.exports = {
   sendOtpEmail,
   isEmailConfigured,
+canExposeOtpInResponse,
   describeEmailConfig,
   verifyEmailConnection,
   sendTestEmail,

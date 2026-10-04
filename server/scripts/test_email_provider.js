@@ -67,6 +67,7 @@ function runSend(provider, envExtra, response) {
       // process, because fetch is stubbed.
       RESEND_API_KEY: 're_fake_key_for_testing',
       SENDGRID_API_KEY: 'SG.fake_key_for_testing',
+      BREVO_API_KEY: 'xkeysib-fake_key_for_testing',
       EMAIL_FROM: 'Smart Dube <no-reply@smartdube.et>',
       ...envExtra
     },
@@ -167,6 +168,34 @@ function main() {
       provider: 'resend',
       response: jsonResponse(502, { message: 'upstream error' }),
       mustMatch: /their side|502/i
+    },
+    {
+      // Brevo words its errors differently from the other two, and every one of
+      // these has to land on the right instruction rather than a generic 400.
+      name: 'brevo unconfirmed sender',
+      provider: 'brevo',
+      response: jsonResponse(400, { code: 'invalid_parameter', message: 'Sender email is not verified' }),
+      mustMatch: /sender|verified/i
+    },
+    {
+      name: 'brevo unregistered sender',
+      provider: 'brevo',
+      response: jsonResponse(400, { code: 'invalid_parameter', message: 'Unrecognized sender email' }),
+      mustMatch: /sender|verified|EMAIL_FROM/i
+    },
+    {
+      // Brevo signals an exhausted free tier with 402, which the other providers
+      // never use, and which would otherwise be read as an invalid request.
+      name: 'brevo out of credits',
+      provider: 'brevo',
+      response: jsonResponse(402, { code: 'not_enough_credits', message: 'Not enough credits' }),
+      mustMatch: /credit|rate.limit|daily/i
+    },
+    {
+      name: 'brevo bad api key',
+      provider: 'brevo',
+      response: jsonResponse(401, { code: 'unauthorized', message: 'Key not found' }),
+      mustMatch: /BREVO_API_KEY/
     }
   ];
 
@@ -181,7 +210,25 @@ function main() {
     check(`${c.name}: the key is never echoed into the error`, !/fake_key_for_testing/.test(JSON.stringify(out.result)));
   }
 
-  // ---- 4. An unconfigured key must SIMULATE, not silently "send" --------
+  // ---- 4. Brevo speaks a different dialect from the other two ----------
+  // It authenticates with an `api-key` header rather than a bearer token, and takes
+  // a different payload. Both are invisible in a 201 response, so a mistake here
+  // fails against the live service and nowhere else.
+  const ok = jsonResponse(201, { messageId: '<abc@brevo>' });
+  const bv = runSend('brevo', { EMAIL_FROM: 'Smart Dube <zinabutigist7@gmail.com>' }, ok);
+  const bvReq = bv.captured[0];
+
+  check('brevo sends to the transactional endpoint', /api\.brevo\.com\/v3\/smtp\/email/.test(String(bvReq?.url)), String(bvReq?.url));
+  check('brevo authenticates with an api-key header', bvReq?.headers?.['api-key']?.startsWith('xkeysib'), JSON.stringify(Object.keys(bvReq?.headers || {})));
+  // A bearer token here would be silently ignored by Brevo and answered 401.
+  check('brevo does not send a bearer token', !bvReq?.headers?.Authorization, JSON.stringify(bvReq?.headers));
+  check('brevo sends no key in the body', !/xkeysib/.test(JSON.stringify(bvReq?.body || {})));
+  check('brevo uses sender/to/htmlContent', bvReq?.body?.sender?.email === 'zinabutigist7@gmail.com' && Array.isArray(bvReq?.body?.to) && typeof bvReq?.body?.htmlContent === 'string', JSON.stringify(bvReq?.body).slice(0, 120));
+  // The display name must not end up inside the address, or Brevo rejects the send.
+  check('brevo keeps the display name out of the address', !/\s/.test(String(bvReq?.body?.sender?.email)), bvReq?.body?.sender?.email);
+  check('brevo reports the messageId', bv.result?.success === true && /abc@brevo/.test(String(bv.result?.messageId)), JSON.stringify(bv.result));
+
+  // ---- 5. An unconfigured key must SIMULATE, not silently "send" --------
   const uc = runSend('resend', { RESEND_API_KEY: '' }, 'new Response("{}", { status: 200 })');
 
   check('a missing API key degrades to SIMULATION', uc.result?.simulated === true && uc.result?.success === true, uc.result?.error);

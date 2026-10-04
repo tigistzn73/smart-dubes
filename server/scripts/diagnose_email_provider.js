@@ -25,7 +25,14 @@ const PROVIDERS = {
     keyVar: 'SENDGRID_API_KEY',
     label: 'SendGrid',
     // SendGrid's own "is this from-address allowed" question, asked directly.
-    domainsUrl: 'https://api.sendgrid.com/v3/senders'
+    domainsUrl: 'https://api.sendgrid.com/v3/senders',
+    authStyle: 'api-key'
+  },
+  brevo: {
+    keyVar: 'BREVO_API_KEY',
+    label: 'Brevo',
+    domainsUrl: 'https://api.brevo.com/v3/senders',
+    authStyle: 'api-key'
   }
 };
 
@@ -34,6 +41,7 @@ function pickProvider() {
   if (explicit && PROVIDERS[explicit]) return explicit;
   if (process.env.RESEND_API_KEY && process.env.RESEND_API_KEY.trim()) return 'resend';
   if (process.env.SENDGRID_API_KEY && process.env.SENDGRID_API_KEY.trim()) return 'sendgrid';
+  if (process.env.BREVO_API_KEY && process.env.BREVO_API_KEY.trim()) return 'brevo';
   return null;
 }
 
@@ -57,8 +65,9 @@ const doh = async (name, type) => {
   }
 };
 
-async function apiGet(url, key) {
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(20000) });
+async function apiGet(url, key, authStyle) {
+  const headers = authStyle === 'api-key' ? { 'api-key': key } : { Authorization: `Bearer ${key}` };
+  const res = await fetch(url, { headers, signal: AbortSignal.timeout(20000) });
   const text = await res.text();
   let json = null;
   try {
@@ -84,8 +93,22 @@ async function main() {
   const from = String(process.env.EMAIL_FROM || '').trim();
   const fromDomain = domainOf(from);
 
+  const keyPrefix = {
+    resend: (k) => k.startsWith('re_'),
+    sendgrid: (k) => k.startsWith('SG.'),
+    brevo: (k) => k.startsWith('xkeysib-')
+  };
+  const expected = {
+    resend: 're_',
+    sendgrid: 'SG.',
+    brevo: 'xkeysib-'
+  };
+  const prefixOk = key ? keyPrefix[provider](key) : false;
+
   console.log(`\nprovider     : ${p.label} (EMAIL_PROVIDER=${provider})`);
-  console.log(`api key      : ${key ? `${key.slice(0, 6)}... (${key.length} chars, ${key.startsWith('re_') ? 'looks like a Resend key' : 'prefix not recognised'})` : 'MISSING'}`);
+  console.log(
+    `api key      : ${key ? `${key.slice(0, 6)}... (${key.length} chars, expected prefix "${expected[provider]}": ${prefixOk ? 'ok' : 'DOES NOT MATCH'})` : 'MISSING'}`
+  );
   console.log(`EMAIL_FROM   : ${from || '(unset)'}`);
   console.log(`from domain  : ${fromDomain || '(none)'}\n`);
 
@@ -113,7 +136,7 @@ async function main() {
   }
 
   // ---- What does the provider itself say? --------------------------------
-  const domains = await apiGet(p.domainsUrl, key);
+  const domains = await apiGet(p.domainsUrl, key, p.authStyle);
   if (!domains.ok) {
     const detail = domains.json?.message || domains.json?.errors?.[0]?.message || domains.text.slice(0, 200);
     console.log(`FAILED: ${p.label} rejected the API key with ${domains.status}: ${detail}`);
@@ -132,6 +155,15 @@ async function main() {
       if (d.status === 'verified') verified.push(String(d.name).toLowerCase());
     }
   }
+  if (provider === 'brevo' && Array.isArray(domains.json)) {
+    console.log('\nsenders on this Brevo account:');
+    for (const s of domains.json) {
+      const state = s.active === true ? 'CONFIRMED' : 'not confirmed';
+      console.log(`  ${String(s.email).padEnd(34)} ${state}`);
+      // `active` is the whole ballgame: Brevo will not send from an inactive sender.
+      if (s.active === true) verified.push(String(s.email).toLowerCase());
+    }
+  }
   if (provider === 'sendgrid' && Array.isArray(domains.json)) {
     console.log('\nverified sender identities on this SendGrid account:');
     for (const s of domains.json) {
@@ -141,50 +173,61 @@ async function main() {
   }
 
   // ---- Is EMAIL_FROM actually allowed to send? ---------------------------
-  // Resend's resend.dev is implicitly usable without appearing in the verified
-  // list, but only to the address on the Resend account. Without this branch the
-  // check reports a hard FAILED and sends you off to verify a domain that does
-  // not need verifying — while hiding the restriction that actually matters.
-  const isOnboardingTestDomain =
-    provider === 'resend' && (fromDomain === 'resend.dev' || fromDomain.endsWith('.resend.dev'));
-
   if (fromDomain) {
-    const ok = isOnboardingTestDomain || verified.some((v) => fromDomain === v || fromDomain.endsWith(`.${v}`));
-    if (isOnboardingTestDomain) {
-      console.log(`\nTEST-ONLY: ${fromDomain} is Resend's shared onboarding domain.`);
-      console.log('          It needs no verification, but delivers ONLY to the email on your Resend');
-      console.log('          account. Fine for proving the key and integration work — not for customers.');
-      console.log('          So the recipient MUST be the email you signed up to Resend with.');
-    } else if (!verified.length) {
-      console.log(`\nFAILED: no verified sending domain on this ${p.label} account.`);
-      console.log('        Every send from an unverified address is refused with 403.');
+    const ok = verified.some((v) => fromDomain === v || fromDomain.endsWith(`.${v}`));
+    const noun = provider === 'brevo' ? 'confirmed sender' : 'verified sending domain';
+    if (!verified.length) {
+      console.log(`\nFAILED: no ${noun} on this ${p.label} account.`);
+      console.log(`        Every send from an unlisted address is refused with 403.`);
     } else if (!ok) {
-      console.log(`\nFAILED: ${fromDomain} is not a verified sending domain on this account.`);
-      console.log(`        Verified: ${verified.join(', ')}`);
-      console.log('        Either verify this domain, or point EMAIL_FROM at one that is verified.');
+      console.log(`\nFAILED: ${fromDomain} is not a ${noun} on this account.`);
+      console.log(`        Confirmed: ${verified.join(', ')}`);
+      console.log(`        Either add ${fromDomain} and confirm it, or point EMAIL_FROM at one that is confirmed.`);
     } else {
-      console.log(`\nok    ${fromDomain} is verified on this account.`);
+      console.log(`\nok    ${fromDomain} is a ${noun} on this account.`);
     }
   }
 
   // ---- Optionally prove delivery -----------------------------------------
   if (sendTo) {
     console.log(`\nsending a real message to ${sendTo} ...`);
-    const url = provider === 'resend' ? 'https://api.resend.com/emails' : 'https://api.sendgrid.com/v3/mail/send';
-    const payload =
-      provider === 'resend'
-        ? { from, to: [sendTo], subject: 'Smart Dube configuration test', text: 'If you are reading this, sending works.' }
-        : {
-            personalizations: [{ to: [{ email: sendTo }] }],
-            from: { email: domainOf(from) ? from.match(/<([^>]+)>/)?.[1] || from : from },
-            subject: 'Smart Dube configuration test',
-            content: [{ type: 'text/plain', value: 'If you are reading this, sending works.' }]
-          };
+    const bare = from.match(/<([^>]+)>/)?.[1] || from;
+    const subject = 'Smart Dube configuration test';
+    const bodyText = 'If you are reading this, sending works.';
 
-    const res = await fetch(url, {
+    const endpoints = {
+      resend: { url: 'https://api.resend.com/emails', auth: 'bearer', payload: { from, to: [sendTo], subject, text: bodyText } },
+      brevo: {
+        url: 'https://api.brevo.com/v3/smtp/email',
+        auth: 'api-key',
+        payload: {
+          sender: { name: 'Smart Dube', email: bare },
+          to: [{ email: sendTo }],
+          subject,
+          textContent: bodyText,
+          htmlContent: `<p>${bodyText}</p>`
+        }
+      },
+      sendgrid: {
+        url: 'https://api.sendgrid.com/v3/mail/send',
+        auth: 'bearer',
+        payload: {
+          personalizations: [{ to: [{ email: sendTo }] }],
+          from: { email: bare },
+          subject,
+          content: [{ type: 'text/plain', value: bodyText }]
+        }
+      }
+    };
+    const ep = endpoints[provider];
+
+    const res = await fetch(ep.url, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      headers: {
+        ...(ep.auth === 'api-key' ? { 'api-key': key } : { Authorization: `Bearer ${key}` }),
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(ep.payload),
       signal: AbortSignal.timeout(20000)
     });
     const text = await res.text();

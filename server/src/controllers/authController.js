@@ -451,7 +451,7 @@ async function forgotPassword(req, res) {
     );
 
     // ---- Deliver ------------------------------------------------------
-    const { sendOtpEmail } = require('../services/emailService');
+    const { sendOtpEmail, canExposeOtpInResponse } = require('../services/emailService');
     const hasEmail = !!(user.email && String(user.email).trim());
 
     let delivery = null;
@@ -469,14 +469,32 @@ async function forgotPassword(req, res) {
           details: { phone: user.phone, channel: 'EMAIL', simulated: !!delivery.simulated }
         });
 
+        // With no provider configured there is no way to hand the code to its owner,
+        // so it is returned in the response instead. canExposeOtpInResponse() gates
+        // that, because this endpoint is unauthenticated: anyone who knows a phone
+        // number could otherwise read that account's reset code and take the account
+        // over. Set EXPOSE_OTP_IN_RESPONSE=true to opt in locally; never on Render.
+        const exposeOtp = delivery.simulated && canExposeOtpInResponse();
+
+        if (delivery.simulated && !exposeOtp) {
+          console.error(
+            `[AUTH] Reset code for user ${user.id} was NOT sent and NOT returned: no email provider is configured.`
+          );
+        }
+
         return res.json({
-          message: delivery.simulated
+          message: exposeOtp
             ? `Email delivery is not configured, so your code is shown here instead. Enter ${resetToken} to continue.`
-            : `A 6-digit verification code has been sent to your registered email (${maskEmail(user.email)}). It expires in ${OTP_TTL_MINUTES} minutes.`,
+            : delivery.simulated
+              // Nothing was sent and the code cannot be shown, so do not claim it was.
+              // Telling a customer to wait for a code that will never arrive is worse
+              // than saying plainly that this is broken on our side.
+              ? 'Email delivery is temporarily unavailable, so we could not send a verification code. Please contact support to reset your password.'
+              : `A 6-digit verification code has been sent to your registered email (${maskEmail(user.email)}). It expires in ${OTP_TTL_MINUTES} minutes.`,
           channel: 'EMAIL',
           destination: maskEmail(user.email),
           expiresInMinutes: OTP_TTL_MINUTES,
-          ...(delivery.simulated ? { _demoOTP: resetToken } : {})
+          ...(exposeOtp ? { _demoOTP: resetToken } : {})
         });
       }
 

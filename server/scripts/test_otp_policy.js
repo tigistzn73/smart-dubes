@@ -13,6 +13,19 @@
 //
 //   node scripts/test_otp_policy.js
 
+// Pin the transport before anything requires emailService.
+//
+// Requirement 1 asserts a real message through SMTP, and the service picks its
+// transport from the environment. Left alone, an EMAIL_PROVIDER or *_API_KEY left
+// in the shell — or a stale .env — silently redirects that assertion to an HTTPS
+// provider, where the test then fails on a fake key and looks like a mail fault.
+// Set here rather than at the call site because resolveConfig() memoises on first
+// use, so this has to happen before the require below.
+process.env.EMAIL_PROVIDER = 'smtp';
+delete process.env.RESEND_API_KEY;
+delete process.env.SENDGRID_API_KEY;
+delete process.env.BREVO_API_KEY;
+
 const bcrypt = require('bcryptjs');
 const db = require('../src/config/database');
 const {
