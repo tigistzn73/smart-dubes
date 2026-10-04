@@ -979,7 +979,7 @@ export const MerchantDashboard = () => {
           reachable with the normal window scrollbar. */}
       <div className="flex-1 w-full space-y-6 pr-2 pb-20">
         {/* Top Banner Stats */}
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 glass-panel p-4 rounded-xl border border-slate-800/80 shadow-md">
+        <div className="sticky top-[var(--nav-h,52px)] z-20 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 glass-panel p-4 rounded-xl border border-slate-800/80 shadow-md">
           <div className="flex flex-col gap-1 text-xs">
             <div className="flex items-center gap-2.5">
               <h2 className="text-sm font-extrabold text-slate-100 tracking-tight">
