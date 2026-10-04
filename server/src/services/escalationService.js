@@ -579,6 +579,27 @@ async function processOverdueTransaction(tx) {
     };
   }
 
+  // Repair a case that was warned but never published. Rows written before the
+  // letter became part of the first-day sweep, and any letter that failed to
+  // rasterise after the SMS had already gone out, both land here: the warning is
+  // on record but court_letter_issued_at is not. The portal only serves cases
+  // carrying an issue timestamp, so without this the notice stays invisible to
+  // the customer and the case sits in WAITING/AWAITING_MERCHANT forever, because
+  // the only path that issues a letter is the first-day branch above.
+  //
+  // Reload rather than reuse caseRow: createEscalationCase returns a narrow row
+  // for an existing case, and issueCourtLetter needs the customer, merchant and
+  // amount columns to build the notice.
+  const full = await loadEscalationCase(escalation.caseId);
+  if (full && !full.court_letter_issued_at) {
+    const issued = await issueCourtLetter(escalation.caseId, full, { trigger: 'AUTO' });
+    return {
+      ...base,
+      action: 'COURT_LETTER_ISSUED',
+      letterRef: issued.letterRef
+    };
+  }
+
   const gracePeriod = caseRow.warning_period_days || WARNING_PERIOD_DAYS;
   const elapsed = daysSince(caseRow.warning_sent_at);
 

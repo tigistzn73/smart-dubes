@@ -938,7 +938,8 @@ export const MerchantDashboard = () => {
             {[
               { id: 'CUSTOMERS', name: t('Customer Ledgers', 'የደንበኞች ሌጀር'), icon: Users, count: customers.length },
               { id: 'TRANSACTIONS', name: t('Credit History', 'የዱቤ ታሪክ'), icon: FileText, count: transactions.length },
-              { id: 'RECEIPT_APPROVALS', name: t('Receipt Approvals', 'ደረሰኝ ማጽደቂያ'), icon: Upload, count: repayments.filter(r => r.status === 'PENDING').length }
+              { id: 'RECEIPT_APPROVALS', name: t('Receipt Approvals', 'ደረሰኝ ማጽደቂያ'), icon: Upload, count: repayments.filter(r => r.status === 'PENDING').length },
+              { id: 'ESCALATIONS', name: t('Debt Escalations', 'የብድር ማስጠንቀቂያ'), icon: ShieldAlert, count: escalationCases.filter(c => c.status === 'SENT').length }
             ].map(item => {
               const isActive = activeTab === item.id;
               const Icon = item.icon;
