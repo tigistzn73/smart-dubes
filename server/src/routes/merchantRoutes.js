@@ -12,7 +12,6 @@ const {
   getMerchantSMSHistory,
   approveRepayment,
   getEscalationCases,
-  getEscalationLetterImage,
   triggerEscalationWarning,
   triggerCourtLetter,
   resolveEscalationCase,
@@ -97,11 +96,6 @@ router.post(
 );
 
 router.get('/escalations', getEscalationCases);
-
-router.get(
-  '/escalations/:caseId/letter.png',
-  getEscalationLetterImage
-);
 
 router.post(
   '/escalations/warning',
