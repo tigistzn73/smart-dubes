@@ -200,6 +200,46 @@ async function main() {
         `HTTP ${expired.status} — ${expired.body.error}`
       );
     }
+
+    // ---- Step 7: the identifier the client actually sends ----------------
+    // Everything above posts `phone`, which is the legacy field name. The browser
+    // sends `identifier`, and the route used to validate `phone` as mandatory — so
+    // every real email reset was rejected at the validation layer with "Phone
+    // number is required" and the code could never be redeemed. Calling the
+    // controller directly, as the other suites do, cannot catch this: it skips the
+    // validators entirely. This check therefore goes through HTTP.
+    const SEEDED = '654321';
+    await db.run(
+      'UPDATE users SET reset_token = $1, reset_token_expires = $2, reset_token_sent_at = NULL, reset_token_attempts = 0 WHERE id = $3',
+      [bcrypt.hashSync(SEEDED, 10), new Date(Date.now() + 300000).toISOString(), user.id]
+    );
+
+    const byIdentifier = await post('/reset-password', {
+      identifier: user.email,
+      otpCode: SEEDED,
+      newPassword: NEW_PASSWORD
+    });
+
+    check(
+      '6. a code is redeemed with `identifier` (what the client sends), not `phone`',
+      byIdentifier.status === 200 && !!byIdentifier.body.token,
+      byIdentifier.status === 200
+        ? 'session token returned'
+        : `HTTP ${byIdentifier.status} — ${byIdentifier.body.error || '(no error)'}`
+    );
+
+    // The same request with no identifier at all must still be refused, so
+    // relaxing the requirement did not turn it into "accept anything".
+    await db.run(
+      'UPDATE users SET reset_token = $1, reset_token_expires = $2, reset_token_sent_at = NULL, reset_token_attempts = 0 WHERE id = $3',
+      [bcrypt.hashSync(SEEDED, 10), new Date(Date.now() + 300000).toISOString(), user.id]
+    );
+    const noIdentifier = await post('/reset-password', { otpCode: SEEDED, newPassword: NEW_PASSWORD });
+    check(
+      '6b. a reset with no account identifier is still refused',
+      noIdentifier.status === 400,
+      `HTTP ${noIdentifier.status} — ${noIdentifier.body.error || '(no error)'}`
+    );
   } finally {
     await db.run(
       `UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expires = NULL,

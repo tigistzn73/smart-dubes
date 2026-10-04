@@ -63,11 +63,20 @@ router.post(
 router.post(
   '/reset-password',
   [
-    body('phone').notEmpty().withMessage('Phone number is required'),
+    // The account is identified by `identifier` (an email or a phone number). This
+    // used to validate `phone` as mandatory, which rejected every email reset with
+    // "Phone number is required" before resetPassword was ever reached, so the code
+    // could not be redeemed no matter how correct it was.
     body('otpCode').notEmpty().withMessage('Verification code is required').isLength({ min: 6, max: 6 }).withMessage('Verification code must be exactly 6 digits'),
     body('newPassword').isLength({ min: 6 }).withMessage('New password must be at least 6 characters'),
     validateResult
   ],
+  (req, res, next) => {
+    if (!req.body.identifier && !req.body.email && !req.body.phone) {
+      return res.status(400).json({ error: 'Email or phone number is required to verify the code' });
+    }
+    next();
+  },
   resetPassword
 );
 
