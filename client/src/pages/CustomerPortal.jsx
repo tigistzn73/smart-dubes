@@ -488,8 +488,8 @@ export const CustomerPortal = () => {
         )}
 
         {/* LEFT SIDEBAR NAVIGATION (DESKTOP ONLY) */}
-        <aside className={`hidden md:flex ${sidebarCollapsed ? 'w-[68px]' : 'w-60'} flex-shrink-0 glass-panel rounded-2xl p-2 md:p-3 flex-col justify-start border border-slate-800 md:fixed md:left-0 md:top-[var(--nav-h,52px)] md:bottom-0 md:z-30 overflow-y-auto transition-all duration-300`}>
-          <div className="space-y-3 md:space-y-4 w-full">
+        <aside className={`hidden md:flex ${sidebarCollapsed ? 'w-[68px]' : 'w-60'} flex-shrink-0 glass-panel rounded-2xl p-2 md:p-3 flex-col justify-start border border-slate-800 md:fixed md:left-0 md:top-[var(--nav-h,52px)] md:bottom-0 md:h-[calc(100vh-var(--nav-h,52px))] md:z-30 overflow-y-auto transition-all duration-300`}>
+          <div className="space-y-3 md:space-y-4 w-full min-h-0">
             {/* Header Toggle */}
             <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} pb-2 border-b border-slate-850`}>
               <span className={`hidden ${sidebarCollapsed ? '' : 'md:inline'} text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono`}>Nav</span>
