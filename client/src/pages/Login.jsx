@@ -480,7 +480,7 @@ setError('');
     };
 
   return (
-    <div className="flex-1 flex flex-col items-center py-4 px-4 min-h-0 overflow-y-auto">
+    <div className="flex flex-col items-center py-4 px-4 lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
 
       <div className="w-full max-w-md space-y-3.5 my-auto">
         {/* Header */}
