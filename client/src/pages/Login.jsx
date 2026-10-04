@@ -123,6 +123,21 @@ function rememberPhone(value) {
 }
 import { getErrorMessage, isValidEthiopianPhone, isValidEmail } from '../utils/errorHelper';
 
+/**
+ * Whether the reset identifier is well formed.
+ *
+ * The reset flow is entered with an email address, but this check was written when
+ * the identifier was a phone number only — so completing the flow with the address
+ * the code had just been sent to was rejected as an invalid phone number. The rule
+ * mirrors the server's forgotPassword, which treats an identifier containing "@"
+ * as an email and anything else as a phone.
+ */
+function isValidResetIdentifier(value) {
+  const v = String(value || '').trim();
+  if (!v) return false;
+  return v.includes('@') ? isValidEmail(v) : isValidEthiopianPhone(v);
+}
+
 export const Login = () => {
   const { loginWithToken, switchDemoRole, register, forgotPassword, resetPassword } = useAuth();
   const { lang, setLang } = useTheme();
@@ -403,14 +418,18 @@ export const Login = () => {
     setError('');
 
     const trimmedPhone = (resetPhone || '').trim();
-    if (!trimmedPhone || trimmedPhone === '+251') {
-      setError('Phone number is required.');
+    if (!trimmedPhone) {
+      setError('The email address or phone number you requested the code for is required.');
       setLoading(false);
       return;
     }
 
-    if (!isValidEthiopianPhone(trimmedPhone)) {
-      setError('Please enter a valid Ethiopian phone number (e.g. +251911223344 or 0911223344).');
+    if (!isValidResetIdentifier(trimmedPhone)) {
+      setError(
+        trimmedPhone.includes('@')
+          ? 'Please enter a valid email address.'
+          : 'Please enter a valid Ethiopian phone number (e.g. +251911223344 or 0911223344).'
+      );
       setLoading(false);
       return;
     }
@@ -954,17 +973,23 @@ setError('');
             )}
 
             <form onSubmit={handleResetPassword} className="space-y-4">
-              {/* Phone */}
+              {/* Where the code went. Read-only: editing it here would leave the
+                  identifier out of step with the address the OTP was sent to, and
+                  the failure would look like a wrong code rather than a wrong
+                  account. */}
               <div>
-                <label className="block text-xs font-bold text-slate-200 mb-1.5">Phone Number:</label>
+                <label className="block text-xs font-bold text-slate-200 mb-1.5">
+                  {t('Code sent to:', 'ኮድ የተላከው:')}
+                </label>
                 <div className="relative">
-                  <Phone className="w-4 h-4 text-sky-400 absolute left-3.5 top-3.5" />
+                  <Mail className="w-4 h-4 text-sky-400 absolute left-3.5 top-3.5" />
                   <input
                     type="text"
                     value={resetPhone}
-                    onChange={e => setResetPhone(e.target.value)}
-                    placeholder="+251911..."
-                    className="w-full bg-slate-950/90 border border-slate-700/80 rounded-xl pl-10 pr-4 py-3 text-xs text-slate-100 font-mono font-medium focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20 transition-all shadow-inner"
+                    readOnly
+                    aria-readonly="true"
+                    placeholder="your@email.com"
+                    className="w-full bg-slate-950/90 border border-slate-700/80 rounded-xl pl-10 pr-4 py-3 text-xs text-slate-300 font-mono font-medium cursor-default select-all focus:outline-none focus:border-slate-600 transition-all shadow-inner"
                     required
                   />
                 </div>

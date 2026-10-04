@@ -106,12 +106,15 @@ export const AuthProvider = ({ children }) => {
     return data;
   };
 
-  // Reset password with the verification code
-  const resetPassword = async (phone, otpCode, newPassword) => {
+  // Reset password with the verification code.
+  // `identifier` rather than `phone`: the code is requested with an email address,
+  // and the server resolves either form. Sending it under the old name made an
+  // email reset look like a phone lookup that found nobody.
+  const resetPassword = async (identifier, otpCode, newPassword) => {
     const res = await fetch('/api/auth/reset-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, otpCode, newPassword })
+      body: JSON.stringify({ identifier, otpCode, newPassword })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(getErrorMessage(data, 'Password reset failed.'));

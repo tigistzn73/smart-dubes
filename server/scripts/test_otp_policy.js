@@ -217,6 +217,72 @@ async function main() {
       !!originalEmail,
       `registered email: ${originalEmail}`
     );
+  const { resetPassword } = require('../src/controllers/authController');
+
+    const seedToken = async () => {
+      await db.run(
+        `UPDATE users
+         SET reset_token = $1, reset_token_expires = $2, reset_token_sent_at = $3, reset_token_attempts = 0
+         WHERE id = $4`,
+        [
+          bcrypt.hashSync('123456', 10),
+          new Date(Date.now() + 300000).toISOString(),
+          new Date().toISOString(),
+          user.id
+        ]
+      );
+    };
+
+    const redeem = (body) =>
+      new Promise((resolve) => {
+        const req = { body, ip: '203.0.113.11' };
+        const res = {
+          // Express defaults to 200 when json() is called without status(), and the
+          // reset success path does exactly that. Without this the check would read
+          // an undefined status and report a false failure.
+          status(code) { this.code = code; return this; },
+          json(payload) { resolve({ status: this.code || 200, body: payload }); }
+        };
+        resetPassword(req, res);
+      });
+
+    // ---- 7. The journey that was broken ---------------------------------
+    // The code is REQUESTED with an email address and must be REDEEMED with that
+    // same email address. Redemption used to look the account up by phone, so a
+    // code genuinely sent to the address the customer typed came back as
+    // "Invalid verification code or phone number".
+    await seedToken();
+    const byEmail = await redeem({ identifier: originalEmail, otpCode: '123456', newPassword: 'ResetJourney!9' });
+
+    check(
+      '7. a code requested by email is redeemed by that same email',
+      byEmail.status === 200 && !byEmail.body.error,
+      `HTTP ${byEmail.status} — ${byEmail.body.error || 'accepted, session returned'}`
+    );
+
+    // ---- 8. The old field name still resolves ----------------------------
+    // An already-loaded bundle sends `phone`. It must not be stranded by the
+    // change, or a customer mid-reset would have to hard-reload to recover.
+    await seedToken();
+    const byLegacyPhone = await redeem({ phone: originalEmail, otpCode: '123456', newPassword: 'ResetJourney!9' });
+
+    check(
+      '8. the legacy `phone` field name still resolves an email',
+      byLegacyPhone.status === 200 && !byLegacyPhone.body.error,
+      `HTTP ${byLegacyPhone.status} — ${byLegacyPhone.body.error || 'accepted, session returned'}`
+    );
+
+    // ---- 9. A real phone number still works ------------------------------
+    // The resolver now branches on '@', so the phone path needs to be proven
+    // rather than assumed.
+    await seedToken();
+    const byPhone = await redeem({ identifier: phone, otpCode: '123456', newPassword: 'ResetJourney!9' });
+
+    check(
+      '9. a phone identifier still redeems a code',
+      byPhone.status === 200 && !byPhone.body.error,
+      `HTTP ${byPhone.status} — ${byPhone.body.error || 'accepted, session returned'}`
+    );
   } finally {
     // Leave the account exactly as it was found.
     await db.run(

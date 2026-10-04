@@ -79,6 +79,33 @@ async function findUserByPhone(rawPhone) {
   );
 }
 
+/**
+ * Resolve a user from either an email address or a phone number.
+ *
+ * The reset flow is entered with an email address, but the redemption step was
+ * still looking accounts up by phone alone — so a code genuinely sent to the
+ * address the customer typed was rejected with "Invalid verification code or phone
+ * number". The two halves of one flow disagreed about what identifies an account.
+ *
+ * An identifier containing "@" is treated as an email, matching the server's own
+ * forgot-password branch, and the '@' test is what decides: a phone number cannot
+ * contain one.
+ */
+async function findUserByIdentifier(identifier) {
+  const value = String(identifier || '').trim();
+  if (!value) return null;
+
+  if (value.includes('@')) {
+    const email = value.toLowerCase();
+    return db.get(
+      'SELECT * FROM users WHERE lower(trim(email)) = $1 OR lower(btrim(email)) = $1',
+      [email]
+    );
+  }
+
+  return findUserByPhone(value);
+}
+
 function recordUnknownPhoneAttempt(ip) {
   const key = ip || 'unknown';
   const now = Date.now();
@@ -400,17 +427,7 @@ async function getMe(req, res) {
 async function forgotPassword(req, res) {
   const { phone, email } = req.body;
   const identifier = String(email || phone || '').trim();
-  let user = null;
-  
-  if (identifier.includes('@')) {
-    const normalizedEmail = identifier.toLowerCase();
-    user = await db.get(
-      'SELECT * FROM users WHERE lower(trim(email)) = $1 OR lower(btrim(email)) = $1',
-      [normalizedEmail]
-    );
-  } else {
-    user = await findUserByPhone(identifier);
-  }
+  const user = await findUserByIdentifier(identifier);
 
   if (!user) {
     return res.status(404).json({ error: 'No account found with this phone number or email.' });
@@ -544,12 +561,15 @@ function maskPhone(phone) {
 }
 
 async function resetPassword(req, res) {
-  const { phone, otpCode, newPassword } = req.body;
+  const { phone, email, identifier, otpCode, newPassword } = req.body;
+  // `identifier` is what the client now sends; `phone` and `email` are accepted so
+  // an older build in a browser tab, or a cached bundle, keeps working.
+  const accountRef = identifier || email || phone;
 
   try {
-    const user = await findUserByPhone(phone);
+    const user = await findUserByIdentifier(accountRef);
     if (!user) {
-      return res.status(400).json({ error: 'Invalid verification code or phone number. Please request a new code.' });
+      return res.status(400).json({ error: 'Invalid verification code, or the email/phone number does not match an account. Please request a new code.' });
     }
 
     if (!user.reset_token) {
