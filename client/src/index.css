@@ -3,6 +3,13 @@
 @tailwind utilities;
 
 @layer base {
+  /* Fallback until Navbar measures itself and publishes the real value.
+     Used by the sticky dashboard sidebars so they park flush under the
+     navbar instead of guessing its height. */
+  :root {
+    --nav-h: 52px;
+  }
+
   body {
     background-color: #0B0F19;
     color: #F8FAFC;

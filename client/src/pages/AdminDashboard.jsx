@@ -310,7 +310,7 @@ export const AdminDashboard = () => {
         )}
 
         {/* LEFT SIDEBAR NAVIGATION (DESKTOP ONLY) */}
-        <aside className={`hidden md:flex ${sidebarCollapsed ? 'w-[68px]' : 'w-60'} flex-shrink-0 glass-panel rounded-2xl p-2 md:p-3 flex-col justify-start border border-slate-800 lg:sticky lg:top-[52px] lg:max-h-[calc(100vh-56px)] overflow-y-auto transition-all duration-300`}>
+        <aside className={`hidden md:flex ${sidebarCollapsed ? 'w-[68px]' : 'w-60'} flex-shrink-0 glass-panel rounded-2xl p-2 md:p-3 flex-col justify-start border border-slate-800 lg:sticky lg:top-[var(--nav-h,52px)] lg:max-h-[calc(100vh-var(--nav-h,52px))] overflow-y-auto transition-all duration-300`}>
           <div className="space-y-3 md:space-y-4 w-full">
             {/* Header Toggle */}
             <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} pb-2 border-b border-slate-850`}>

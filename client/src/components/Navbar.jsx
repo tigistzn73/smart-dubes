@@ -38,8 +38,34 @@ export const Navbar = () => {
   const [unreadAlertsCount, setUnreadAlertsCount] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(!!document.fullscreenElement);
   const menuRef = useRef(null);
+  const headerRef = useRef(null);
 
   const t = (en, am) => (lang === 'EN' ? en : am);
+
+  // Publish the real navbar height as --nav-h so the sticky sidebars can park
+  // exactly underneath it. It is not a fixed number: the header grows and
+  // shrinks with the viewport (the subtitle is sm:block only) and with the
+  // controls shown for guest/merchant/customer/admin.
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header) return;
+
+    const publish = () => {
+      const h = Math.round(header.getBoundingClientRect().height);
+      document.documentElement.style.setProperty('--nav-h', `${h}px`);
+    };
+
+    publish();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', publish);
+      return () => window.removeEventListener('resize', publish);
+    }
+
+    const ro = new ResizeObserver(publish);
+    ro.observe(header);
+    return () => ro.disconnect();
+  }, []);
 
   // Sync fullscreen state
   useEffect(() => {
@@ -270,7 +296,7 @@ export const Navbar = () => {
         </div>
       )}
 
-      <header className="navbar-header sticky top-0 z-40 border-b border-slate-800 px-2 py-1.5 flex items-center justify-between transition-colors duration-300">
+      <header ref={headerRef} className="navbar-header sticky top-0 z-40 border-b border-slate-800 px-2 py-1.5 flex items-center justify-between transition-colors duration-300">
         {/* Brand Header */}
         <div className="flex items-center gap-2.5 sm:gap-3">
           <div className="flex flex-col items-center gap-1 shrink-0">
