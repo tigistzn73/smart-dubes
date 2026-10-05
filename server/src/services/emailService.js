@@ -209,6 +209,7 @@ let config = null;
 const HTTP_PROVIDERS = {
   resend: {
     keyVar: 'RESEND_API_KEY',
+    keyPrefix: 're_',
     label: 'Resend (HTTPS API)',
     sendUrl: 'https://api.resend.com/emails',
     verifyUrl: 'https://api.resend.com/domains',
@@ -219,6 +220,7 @@ const HTTP_PROVIDERS = {
   },
   sendgrid: {
     keyVar: 'SENDGRID_API_KEY',
+    keyPrefix: 'SG.',
     label: 'SendGrid (HTTPS API)',
     sendUrl: 'https://api.sendgrid.com/v3/mail/send',
     verifyUrl: 'https://api.sendgrid.com/v3/scopes',
@@ -232,6 +234,7 @@ const HTTP_PROVIDERS = {
   },
   brevo: {
     keyVar: 'BREVO_API_KEY',
+    keyPrefix: 'xkeysib-',
     label: 'Brevo (HTTPS API)',
     sendUrl: 'https://api.brevo.com/v3/smtp/email',
     // The sender list, not /account: it answers the question that actually stops a
@@ -505,7 +508,12 @@ function explainHttpApiError(status, body, p) {
   }
 
   if (status === 401 || /api key is invalid|invalid api key|unauthorized|forbidden|key not found|api-key not found/.test(text)) {
-    return `The provider rejected the API key. Check ${p.keyVar} — it should be the whole key, and on Resend the key must start "re_".`;
+    // The prefix has to be this provider's own. The hint used to name Resend's
+    // unconditionally, so a rejected Brevo key was answered with advice about a
+    // key format Brevo does not use — which sends whoever is debugging it looking
+    // in the wrong place.
+    const prefix = p.keyPrefix ? ` On ${p.label} it starts "${p.keyPrefix}"` : '';
+    return `The provider rejected the API key. Check ${p.keyVar} — it should be the whole key, not truncated or wrapped in quotes.${prefix}`;
   }
 
   if (status === 429 || status === 402 || /rate limit|too many requests|sending limit|quota|not_enough_credits/.test(text)) {
