@@ -167,11 +167,20 @@ async function registerUser(req, res) {
     const userId = result.id;
 
     let merchantInfo = null;
+    // Resolved once and used for both the INSERT and the welcome mail. Reading
+    // them twice let the fallback and the row drift apart, so a merchant could be
+    // emailed details for a store that was never saved.
+    const merchantDefaults = {
+      storeName: storeName || `${fullName}'s Shop`,
+      businessLicenseNo: businessLicenseNo || 'LIC-PENDING',
+      address: address || 'Addis Ababa'
+    };
+
     if (role === 'MERCHANT') {
       const mResult = await db.get(`
         INSERT INTO merchants (user_id, store_name, business_license_no, address, kyc_status)
         VALUES ($1, $2, $3, $4, 'PENDING') RETURNING id
-      `, [userId, storeName || `${fullName}'s Shop`, businessLicenseNo || 'LIC-PENDING', address || 'Addis Ababa']);
+      `, [userId, merchantDefaults.storeName, merchantDefaults.businessLicenseNo, merchantDefaults.address]);
       merchantInfo = { id: mResult.id, kycStatus: 'PENDING' };
     } else if (role === 'CUSTOMER') {
       const existingCp = await db.get('SELECT id FROM customer_profiles WHERE phone = $1', [phone]);
@@ -189,6 +198,45 @@ async function registerUser(req, res) {
       resource: `User #${userId} (${role})`,
       details: { role, phone, storeName }
     });
+
+    // Welcome email to the address just registered. Deliberately neither awaited
+    // nor allowed to fail the request: the account and its token already exist, so
+    // making the response wait on a third-party relay would turn a slow SMTP
+    // handshake into a failed signup, and reporting a send failure as a
+    // registration failure would tell someone to retry an account that is
+    // already there — which the uniqueness check would then reject as a duplicate.
+    // Not awaited is what keeps the HTTP response off the relay's critical path.
+    const { sendRegistrationEmail } = require('../services/emailService');
+    sendRegistrationEmail({
+      to: email,
+      fullName,
+      role,
+      details: {
+        email,
+        phone,
+        faydaId,
+        ...merchantDefaults
+      }
+    })
+      .then((delivery) => {
+        logAudit({
+          userId,
+          actorName: fullName,
+          action: delivery && delivery.success
+            ? 'REGISTRATION_EMAIL_SENT'
+            : 'REGISTRATION_EMAIL_FAILED',
+          resource: `User #${userId} (${role})`,
+          details: {
+            simulated: !!(delivery && delivery.simulated),
+            reason: delivery ? delivery.hint || delivery.error || null : null
+          }
+        });
+      })
+      .catch((err) => {
+        // sendRegistrationEmail does not throw by contract, so reaching here means
+        // something outside that contract broke. Log it and leave registration alone.
+        console.error(`[AUTH] Registration email failed for user ${userId}:`, err && err.message);
+      });
 
     const token = jwt.sign({ id: userId, fullName, phone, role }, JWT_SECRET, { expiresIn: '7d' });
 

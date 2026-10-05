@@ -1,4 +1,5 @@
-// Outbound email for password-reset OTP codes.
+// Outbound account email: password-reset OTP codes and registration
+// confirmations.
 //
 // The phone number is the login identity in this app, but it is also the least
 // durable one: a customer who loses their SIM or changes their number can no
@@ -931,32 +932,26 @@ function escapeHtml(value) {
 }
 
 /**
- * Send a password-reset OTP to an email address.
+ * Hand one built message to whichever transport is configured.
  *
- * Never throws. A reset request must not become a 500 just because the mail
- * relay is down, and the caller needs a truthful `success`/`simulated` pair to
- * decide whether it may disclose the code inline.
+ * Split out of sendOtpEmail because every other outbound mail here needs the
+ * same three-way decision (simulate / HTTP API / SMTP) and the same
+ * recipient-rejection handling. Repeating it per message is how the branches
+ * drift apart and the delivery reporting stops being trustworthy.
  *
- * @param {number} [expiresInMinutes] Lifetime to state in the copy. Passed in from
- *   the caller's OTP policy so the email can never advertise a different window
- *   than the one the server actually enforces.
+ * Never throws. A request must not become a 500 just because the mail relay is
+ * down, and the caller needs a truthful `success`/`simulated` pair to decide
+ * what it may tell the user.
  *
  * @returns {Promise<{success:boolean, simulated:boolean, channel:string, messageId?:string, error?:string, hint?:string}>}
  */
-async function sendOtpEmail({ to, fullName, otpCode, expiresInMinutes = 5 }) {
+async function deliverMessage({ to, subject, text, html }) {
   const recipient = String(to || '').trim();
   if (!recipient) {
     return { success: false, simulated: false, channel: 'EMAIL', error: 'No email address on file.' };
   }
 
   const cfg = resolveConfig();
-  const { text, html } = buildOtpEmail({
-    fullName,
-    otpCode,
-    appName: cfg.appName,
-    expiresInMinutes
-  });
-  const subject = `${otpCode} is your ${cfg.appName} verification code`;
 
   if (!isEmailConfigured()) {
     console.log(`[EMAIL SIMULATION] To: ${recipient} | Subject: ${subject}`);
@@ -1001,7 +996,7 @@ async function sendOtpEmail({ to, fullName, otpCode, expiresInMinutes = 5 }) {
       return { success: false, simulated: false, channel: 'EMAIL', error: 'recipient_rejected', hint };
     }
 
-    console.log(`[EMAIL] Sent | To: ${recipient} | MessageId: ${info.messageId} | Accepted: ${info.accepted?.length ?? 0}`);
+    console.log(`[EMAIL] Sent | To: ${recipient} | Subject: ${subject} | MessageId: ${info.messageId} | Accepted: ${info.accepted?.length ?? 0}`);
     return { success: true, simulated: false, channel: 'EMAIL', messageId: info.messageId };
   } catch (err) {
     const hint = explainSmtpError(err);
@@ -1017,14 +1012,182 @@ async function sendOtpEmail({ to, fullName, otpCode, expiresInMinutes = 5 }) {
   }
 }
 
+/**
+ * Send a password-reset OTP to an email address.
+ *
+ * @param {number} [expiresInMinutes] Lifetime to state in the copy. Passed in from
+ *   the caller's OTP policy so the email can never advertise a different window
+ *   than the one the server actually enforces.
+ *
+ * @returns {Promise<{success:boolean, simulated:boolean, channel:string, messageId?:string, error?:string, hint?:string}>}
+ */
+async function sendOtpEmail({ to, fullName, otpCode, expiresInMinutes = 5 }) {
+  const cfg = resolveConfig();
+  const { text, html } = buildOtpEmail({
+    fullName,
+    otpCode,
+    appName: cfg.appName,
+    expiresInMinutes
+  });
+
+  return deliverMessage({
+    to,
+    subject: `${otpCode} is your ${cfg.appName} verification code`,
+    text,
+    html
+  });
+}
+
+/**
+ * Build the welcome message sent once an account exists.
+ *
+ * The copy branches on role because the two audiences have different next steps:
+ * a merchant is blocked on KYC review and cannot issue credit until it clears,
+ * while a customer's next step is to look at credit a shop already issued. One
+ * generic "your account is ready" leaves both of them with nothing to do.
+ *
+ * Nothing secret is ever placed in this message. The password is not echoed back
+ * and no reset token is generated: the mail confirms an account and points at
+ * the recovery channel, it is not a credential.
+ */
+function buildRegistrationEmail({ fullName, role, details = {}, appName = 'Smart Dube' }) {
+  const isMerchant = String(role || '').toUpperCase() === 'MERCHANT';
+  const greeting = fullName ? `Hi ${fullName},` : 'Hi,';
+  const accountLabel = isMerchant ? 'merchant' : 'customer';
+
+  // The same values the row was written with, not the raw request body, so the
+  // confirmation can never describe an account differently from the stored one.
+  const detailRows = (isMerchant
+    ? [
+        ['Store name', details.storeName],
+        ['Business licence', details.businessLicenseNo],
+        ['Business address', details.address]
+      ]
+    : [
+        ['Phone number', details.phone],
+        ['Fayda ID', details.faydaId]
+      ]
+  ).filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== '');
+
+  const nextSteps = isMerchant
+    ? [
+        'Your business licence is now under review, and your account status shows as pending. We will email you at this address once it is approved.',
+        'You can issue credit to customers only after approval — until then, add your customers so their details are ready when it clears.',
+        'Add your bank details in Settings so repayments are settled into the right account.'
+      ]
+    : [
+        'Open your dashboard to see your credit balance, what you owe, and your repayment schedule.',
+        `Shops that sell to you on credit on ${appName} appear there automatically. You do not need to do anything to connect with them.`,
+        'If you ever forget your password, we send a verification code to this email address.'
+      ];
+
+  const subject = isMerchant
+    ? `Welcome to ${appName} — your merchant account is ready`
+    : `Welcome to ${appName} — your account is ready`;
+
+  const text = [
+    greeting,
+    '',
+    `Your ${appName} ${accountLabel} account has been created.`,
+    '',
+    ...(detailRows.length
+      ? ['What you registered:', ...detailRows.map(([label, value]) => `  ${label}: ${value}`), '']
+      : []),
+    'What happens next:',
+    ...nextSteps.map((step) => `  - ${step}`),
+    '',
+    `Sign in with the phone number you registered and the password you chose.`,
+    ...(details.email ? [`We will use ${details.email} to reach you about this account.`] : []),
+    '',
+    'We will never ask you for your password by email or SMS. If anyone does,',
+    'it is not us — do not share it.',
+    '',
+    `If you did not create this account, contact support straight away.`
+  ].join('\n');
+
+  const detailHtml = detailRows.length
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;border-collapse:collapse;">
+${detailRows
+        .map(
+          ([label, value]) => `          <tr>
+            <td style="padding:6px 0;font-size:13px;line-height:1.5;color:#64748b;">${escapeHtml(label)}</td>
+            <td style="padding:6px 0;font-size:13px;line-height:1.5;color:#0f172a;font-weight:600;">${escapeHtml(value)}</td>
+          </tr>`
+        )
+        .join('\n')}
+        </table>`
+    : '';
+
+  const html = `<!doctype html>
+<html>
+  <body style="margin:0;padding:24px;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
+    <div style="max-width:480px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+      <div style="background:#065f46;padding:20px 24px;">
+        <h1 style="margin:0;color:#ffffff;font-size:18px;letter-spacing:-0.01em;">${escapeHtml(appName)}</h1>
+      </div>
+      <div style="padding:24px;">
+        <p style="margin:0 0 16px;font-size:14px;line-height:1.5;">${escapeHtml(greeting)}</p>
+        <p style="margin:0 0 20px;font-size:14px;line-height:1.5;">
+          Your ${escapeHtml(appName)} ${escapeHtml(accountLabel)} account has been created.
+        </p>
+        ${detailHtml}
+        <p style="margin:0 0 8px;font-size:13px;line-height:1.5;color:#334155;">What happens next:</p>
+        <ul style="margin:0 0 20px;padding-left:20px;font-size:14px;line-height:1.6;color:#334155;">
+${nextSteps.map((step) => `          <li style="margin:0 0 8px;">${escapeHtml(step)}</li>`).join('\n')}
+        </ul>
+        <p style="margin:0 0 8px;font-size:13px;line-height:1.5;color:#334155;">
+          Sign in with the phone number you registered and the password you chose.
+        </p>
+        ${details.email ? `<p style="margin:0 0 16px;font-size:13px;line-height:1.5;color:#334155;">
+          We will use ${escapeHtml(details.email)} to reach you about this account.
+        </p>` : ''}
+        <p style="margin:0 0 16px;font-size:12px;line-height:1.5;color:#64748b;">
+          We will never ask you for your password by email or SMS. If anyone does,
+          it is not us &mdash; please do not share it.
+        </p>
+        <p style="margin:0;font-size:12px;line-height:1.5;color:#64748b;">
+          If you did not create this account, contact support straight away.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>`;
+
+  return { subject, text, html };
+}
+
+/**
+ * Send the welcome message to a newly registered address.
+ *
+ * Confirmation, not a gate: the account already exists by the time this runs, so
+ * a caller must not treat a failure here as a failed registration. Never throws
+ * and reports the same `success`/`simulated` pair as the OTP path so the caller
+ * can log truthfully either way.
+ *
+ * @returns {Promise<{success:boolean, simulated:boolean, channel:string, messageId?:string, error?:string, hint?:string}>}
+ */
+async function sendRegistrationEmail({ to, fullName, role, details = {} }) {
+  const cfg = resolveConfig();
+  const { subject, text, html } = buildRegistrationEmail({
+    fullName,
+    role,
+    details,
+    appName: cfg.appName
+  });
+
+  return deliverMessage({ to, subject, text, html });
+}
+
 module.exports = {
   sendOtpEmail,
+  sendRegistrationEmail,
   isEmailConfigured,
-canExposeOtpInResponse,
+  canExposeOtpInResponse,
   describeEmailConfig,
   verifyEmailConnection,
   sendTestEmail,
   buildOtpEmail,
+  buildRegistrationEmail,
   explainSmtpError,
   // Exported for the diagnostic scripts and the provider tests, which need to
   // assert on how a failure is described without sending a message.
