@@ -2,6 +2,7 @@ const db = require('../config/database');
 require('dotenv').config();
 
 const { isTwilioConfigured, sendViaTwilio, describeTwilioConfig } = require('./twilioService');
+const { sendNotificationEmail } = require('./emailService');
 
 // ============================================================
 //  Outbound SMS gateway selection
@@ -88,6 +89,35 @@ if (!AfricasTalking) {
 }
 
 /**
+ * Look up the customer's registered email and send the same notice there.
+ *
+ * Never throws: this is a secondary channel, so any lookup or relay failure is
+ * logged and swallowed rather than propagated into the SMS flow.
+ */
+async function mirrorToEmail({ customerId, type, message }) {
+  if (!customerId) return;
+  try {
+    const row = await db.get(`
+      SELECT u.email
+      FROM customer_profiles cp
+      JOIN users u ON u.id = cp.user_id
+      WHERE cp.id = $1 AND u.email IS NOT NULL AND btrim(u.email) <> ''
+    `, [customerId]);
+    if (!row) return;
+
+    const result = await sendNotificationEmail({ to: row.email, type, message });
+    if (result.success) {
+      console.log(`[EMAIL NOTICE] ${result.simulated ? 'SIMULATED' : 'Sent'} | To: ${row.email} | Type: ${type}${result.messageId ? ` | MessageId: ${result.messageId}` : ''}`);
+    } else {
+      console.error(`[EMAIL NOTICE] Failed | To: ${row.email} | Type: ${type} | ${result.hint || result.error}`);
+    }
+    return result;
+  } catch (err) {
+    console.error('[EMAIL NOTICE] Error:', err.message);
+  }
+}
+
+/**
  * Send an outbound SMS, or an MMS when `mediaUrls` is supplied.
  *
  * `mediaUrls` must be absolute public HTTPS URLs. Providers fetch media
@@ -114,6 +144,13 @@ async function sendSMS({ customerId, phone, message, type, mediaUrls }) {
   } catch (dbErr) {
     console.error('[SMS DB Error]:', dbErr.message);
   }
+
+  // 1b. Mirror the notice to the customer's registered email, when they have
+  //     one on file. Fire-and-forget: the notification row already exists, so a
+  //     slow or broken relay must not delay or fail the SMS attempt. Customers
+  //     without a linked user account (or without an email) are silently
+  //     skipped — the in-app notice is the channel of record either way.
+  mirrorToEmail({ customerId, type: dbType, message });
 
   // 2. Normalize phone to E.164. Both gateways reject anything else.
   const normalizePhone = (p) => {

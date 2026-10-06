@@ -1186,9 +1186,77 @@ async function sendRegistrationEmail({ to, fullName, role, details = {} }) {
   return deliverMessage({ to, subject, text, html });
 }
 
+// ============================================================
+//  Customer ledger notifications (mirrored from the in-app notice)
+// ============================================================
+const NOTIFICATION_SUBJECTS = {
+  CREDIT_ISSUED: 'New credit logged',
+  REMINDER: 'Repayment reminder',
+  OVERDUE_ALERT: 'Urgent: payment overdue',
+  PAYMENT_RECEIPT: 'Payment receipt',
+  COURT_LETTER: 'Legal notice'
+};
+
+/**
+ * Build the email that mirrors an in-app / SMS ledger notice.
+ *
+ * The body is the exact text shown on the customer's page, so the email can
+ * never describe an event differently from the notification history.
+ */
+function buildNotificationEmail({ type, message, appName = 'Smart Dube' }) {
+  const label = NOTIFICATION_SUBJECTS[type] || 'Ledger notification';
+  const subject = `${appName} — ${label}`;
+
+  const text = [
+    message,
+    '',
+    `This notice is also on your ${appName} page. Reply to your merchant if anything looks wrong.`
+  ].join('\n');
+
+  const html = `<!doctype html>
+<html>
+  <body style="margin:0;padding:24px;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
+    <div style="max-width:480px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+      <div style="background:#065f46;padding:20px 24px;">
+        <h1 style="margin:0;color:#ffffff;font-size:18px;letter-spacing:-0.01em;">${escapeHtml(appName)}</h1>
+        <p style="margin:6px 0 0;color:#a7f3d0;font-size:13px;">${escapeHtml(label)}</p>
+      </div>
+      <div style="padding:24px;">
+        <p style="margin:0 0 20px;font-size:14px;line-height:1.6;white-space:pre-line;">${escapeHtml(message)}</p>
+        <p style="margin:0;font-size:12px;line-height:1.5;color:#64748b;">
+          This notice is also on your ${escapeHtml(appName)} page. Reply to your merchant if anything looks wrong.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>`;
+
+  return { subject, text, html };
+}
+
+/**
+ * Send a ledger notice to the customer's registered email address.
+ *
+ * Confirmation, not a gate: the notification row is already written and the
+ * SMS attempt is already under way, so an email failure must never surface as
+ * a failed notification. Never throws and reports the same
+ * `success`/`simulated` pair as the other senders so the caller can log
+ * truthfully either way.
+ *
+ * @returns {Promise<{success:boolean, simulated:boolean, channel:string, messageId?:string, error?:string, hint?:string}>}
+ */
+async function sendNotificationEmail({ to, type, message }) {
+  const cfg = resolveConfig();
+  const { subject, text, html } = buildNotificationEmail({ type, message, appName: cfg.appName });
+
+  return deliverMessage({ to, subject, text, html });
+}
+
 module.exports = {
   sendOtpEmail,
   sendRegistrationEmail,
+  sendNotificationEmail,
+  buildNotificationEmail,
   isEmailConfigured,
   canExposeOtpInResponse,
   describeEmailConfig,
