@@ -28,6 +28,7 @@ export const CustomerPortal = () => {
   const { user } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [dashboardError, setDashboardError] = useState(null);
   const { lang } = useTheme();
   const t = (en, am) => (lang === 'EN' ? en : am);
   const [selectedTxForPayment, setSelectedTxForPayment] = useState(null);
@@ -120,13 +121,29 @@ export const CustomerPortal = () => {
   const fetchCustomerDashboard = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/customer/dashboard', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const resData = await res.json();
-      setData(resData);
-    } catch (err) {
-      console.error('Customer dashboard error:', err);
+      // Transient DB drops return a 500 body like { error: '...' }. Never let
+      // that replace already-loaded data — it used to blank every list on the
+      // page (receipts vanished right after scheduling). Retry once, then keep
+      // the last good payload and surface a banner instead.
+      let lastErr = null;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const res = await fetch('/api/customer/dashboard', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const resData = await res.json();
+          if (resData?.error) throw new Error(resData.error);
+          setData(resData);
+          setDashboardError(null);
+          return;
+        } catch (err) {
+          lastErr = err;
+          if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 700));
+        }
+      }
+      console.error('Customer dashboard error:', lastErr);
+      setDashboardError(lastErr);
     } finally {
       setLoading(false);
     }
@@ -408,6 +425,22 @@ export const CustomerPortal = () => {
 
   return (
     <div className="flex flex-col">
+      {dashboardError && (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold px-4 py-3 rounded-xl">
+          <span className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            {data
+              ? t("Couldn't refresh your dashboard — showing the last loaded data.", 'የዳሽቦርድዎን አድቷውት አልተሳካም — የመጨረሻውን የተጫነ መረጃ እየተመለከተ ነው።')
+              : t("Couldn't load your dashboard. Your data is safe — please retry.", 'ዳሽቦርድዎን መጫን አልተሳካም። መረጃዎ ደህንነቱ የተጠበቀ ነው — እባክዎ እንደገና ይሞክሩ።')}
+          </span>
+          <button
+            onClick={fetchCustomerDashboard}
+            className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 text-[11px] font-extrabold transition-colors cursor-pointer"
+          >
+            {t('Retry', 'እንደገና ይሞክሩ')}
+          </button>
+        </div>
+      )}
       <div className={`flex flex-row gap-1.5 md:gap-3 items-start transition-all duration-300 ${sidebarCollapsed ? 'md:pl-[68px]' : 'md:pl-[240px]'}`}>
         {/* MOBILE SIDEBAR DRAWER (FOR PHONES) */}
         {mobileSidebarOpen && (
