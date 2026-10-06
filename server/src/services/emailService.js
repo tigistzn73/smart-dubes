@@ -683,7 +683,18 @@ function checkSenderListed(from, raw, p) {
     // Brevo returns a bare array of senders. `active` is the difference between
     // registered and confirmed, so a sender that is present but inactive is a
     // distinct failure with a distinct fix.
-    senders = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.data) ? parsed.data : [];
+    // Brevo wraps the list in a `senders` key; Resend/SendGrid-style bodies use
+    // `data`, and some endpoints answer with a bare array. All three shapes are
+    // accepted, because missing the wrapper reads as "no senders registered"
+    // even when the sender is present and active — a false alarm that sends
+    // whoever is debugging it to re-verify an address that was already verified.
+    senders = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed?.senders)
+        ? parsed.senders
+        : Array.isArray(parsed?.data)
+          ? parsed.data
+          : [];
   } catch {
     // Unparseable body: let the first send decide rather than block startup.
     return { ok: true };

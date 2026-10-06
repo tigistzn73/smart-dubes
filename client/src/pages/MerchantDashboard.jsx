@@ -1000,28 +1000,6 @@ export const MerchantDashboard = () => {
           </div>
         </div>
 
-        {escalationCases.some(c => c.court_letter_issued && !c.court_letter_sent_at) && (
-          <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold mb-4 animate-fade-in">
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0">
-                <AlertTriangle className="w-5 h-5 text-amber-400" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-slate-100">Final Court Letter Issued</h3>
-                <p className="text-[10px] text-slate-300 mt-1">
-                  Merkato Supermarket has issued a formal court letter (Ref: CL-28-20261004) for your overdue Dube of 2000.00 ETB, which passed its due date on 2026-09-25.
-                </p>
-                <p className="text-[10px] text-slate-400 mt-1">
-                  You have 7 days left to settle in full before this is referred to court.
-                </p>
-                <p className="text-[10px] text-slate-400 mt-1">
-                  This letter is already on your page and counts from today. The shop has not yet sent it to you by SMS.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
         {smsFeedback && (
           <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold flex items-center justify-between animate-fade-in">
             <span className="flex items-center gap-2">
@@ -1966,6 +1944,55 @@ export const MerchantDashboard = () => {
               </span>
             )}
           </div>
+
+          {/* Final Court Letter notices — scoped to this tab only, driven by the
+              real case rows instead of the hardcoded placeholder that used to sit
+              on the dashboard home for every tab. */}
+          {escalationCases
+            .filter(c => c.court_letter_issued && !c.court_letter_sent_at && c.status !== 'RESOLVED' && c.status !== 'CLOSED')
+            .map(ec => {
+              const issuedAt = ec.court_letter_issued_at ? new Date(ec.court_letter_issued_at) : null;
+              const deadline = issuedAt
+                ? new Date(issuedAt.getTime() + (ec.grace_period_days || 0) * 86400000)
+                : null;
+              const daysLeft = deadline
+                ? Math.max(0, Math.ceil((deadline.getTime() - Date.now()) / 86400000))
+                : null;
+              const dueDate = ec.due_date ? String(ec.due_date).split('T')[0] : 'N/A';
+              const letterRef = ec.court_letter_ref || ec.transaction_ref || 'N/A';
+              return (
+                <div key={`court-notice-${ec.id}`} className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold animate-fade-in">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0">
+                      <AlertTriangle className="w-5 h-5 text-amber-400" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-slate-100">{t('Final Court Letter Issued', 'ፍጹም የዳኝነት ደብዳቤ ተላክልቷል')}</h3>
+                      <p className="text-[10px] text-slate-300 mt-1">
+                        {t(
+                          `${merchant?.store_name || 'This store'} has issued a formal court letter (Ref: ${letterRef}) for the overdue Dube of ${ec.customer_name} of ${parseFloat(ec.amount).toFixed(2)} ETB, which passed its due date on ${dueDate}.`,
+                          `${merchant?.store_name || 'ህንፃው'} በ${parseFloat(ec.amount).toFixed(2)} ETB የደነበረውን የዱቤ ብድር ስለ ${ec.customer_name} ሲሆን ጊዜው በ${dueDate} ያለፈበት ፍጹም የዳኝነት ደብዳቤ (ማጣቀሻ: ${letterRef}) አስደምጥሷል።`
+                        )}
+                      </p>
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        {daysLeft !== null && daysLeft > 0
+                          ? t(
+                              `You have ${daysLeft} day${daysLeft === 1 ? '' : 's'} left to settle in full before this is referred to court.`,
+                              `ከዳኝነት በመቅረብበት በፊት ${daysLeft} ቀን ${daysLeft === 1 ? 'ቀን' : 'ቀናት'} ያለዎት ነው።`
+                            )
+                          : t('Settle in full immediately to avoid legal action.', 'የሕግ እርምጃ እንዳይወሰዱ ወዲያውኑ ሙሉ በሙሉ ይከፍሉ።')}
+                      </p>
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        {t(
+                          'This letter is already on your page and counts from today. The shop has not yet sent it to you by SMS.',
+                          'ይህ ደብዳቤ በዚህ ጊዜ በገጹ ላይ ተቀምጧል። ድሽንግ ጎዳናው እስካሁን በኤስኤምኤስ አልላከውም።'
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
 
           {escalationCases.length === 0 ? (
             <div className="text-center py-10 bg-slate-900/40 rounded-xl border border-slate-800 text-slate-500 text-xs">

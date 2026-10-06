@@ -18,6 +18,7 @@
     "test:email": "node scripts/test_email.js",
     "test:email:ipv4": "node scripts/test_email_ipv4.js",
     "test:email:provider": "node scripts/test_email_provider.js",
+    "test:email:brevo": "node scripts/check_brevo.js",
     "test:notice:email": "node scripts/smoke_notice_email.js",
     "diagnose:provider": "node scripts/diagnose_email_provider.js",
     "diagnose:email": "node scripts/diagnose_email_otp.js",
