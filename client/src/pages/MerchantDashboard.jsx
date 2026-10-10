@@ -29,8 +29,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
-  Maximize2,
-  Minimize2,
   Store,
   Landmark
 } from 'lucide-react';
@@ -53,34 +51,6 @@ export const MerchantDashboard = () => {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState(null);
   const [approvingId, setApprovingId] = useState(null);
-  const [isFullscreen, setIsFullscreen] = useState(!!document.fullscreenElement);
-
-  // Sync fullscreen state
-  useEffect(() => {
-    const handleFsChange = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener('fullscreenchange', handleFsChange);
-    document.addEventListener('webkitfullscreenchange', handleFsChange);
-    return () => {
-      document.removeEventListener('fullscreenchange', handleFsChange);
-      document.removeEventListener('webkitfullscreenchange', handleFsChange);
-    };
-  }, []);
-
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-      if (document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen().catch(() => {});
-      } else if (document.documentElement.webkitRequestFullscreen) {
-        document.documentElement.webkitRequestFullscreen();
-      }
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen().catch(() => {});
-      } else if (document.webkitExitFullscreen) {
-        document.webkitExitFullscreen();
-      }
-    }
-  };
 
   // Listen for mobile sidebar toggle and tab switch from Navbar
   useEffect(() => {
@@ -876,14 +846,6 @@ export const MerchantDashboard = () => {
           <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} pb-2 border-b border-slate-850`}>
             <span className={`hidden ${sidebarCollapsed ? '' : 'md:inline'} text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono`}>Nav</span>
             <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={toggleFullscreen}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all cursor-pointer"
-                title={isFullscreen ? t('Exit Fullscreen', 'ከሙሉ ገጽ ውጣ') : t('Fullscreen', 'ሙሉ ገጽ')}
-              >
-                {isFullscreen ? <Minimize2 className="w-4 h-4 text-emerald-400" /> : <Maximize2 className="w-4 h-4 text-sky-400" />}
-              </button>
               <button
                 type="button"
                 onClick={() => setSidebarCollapsed(!sidebarCollapsed)}

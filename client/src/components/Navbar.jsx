@@ -24,9 +24,7 @@ import {
   CheckCircle2,
   Building,
   Server,
-  Lock,
-  Maximize2,
-  Minimize2
+  Lock
 } from 'lucide-react';
 
 export const Navbar = () => {
@@ -36,7 +34,6 @@ export const Navbar = () => {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [unreadAlertsCount, setUnreadAlertsCount] = useState(0);
-  const [isFullscreen, setIsFullscreen] = useState(!!document.fullscreenElement);
   const menuRef = useRef(null);
   const headerRef = useRef(null);
 
@@ -66,33 +63,6 @@ export const Navbar = () => {
     ro.observe(header);
     return () => ro.disconnect();
   }, []);
-
-  // Sync fullscreen state
-  useEffect(() => {
-    const handleFsChange = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener('fullscreenchange', handleFsChange);
-    document.addEventListener('webkitfullscreenchange', handleFsChange);
-    return () => {
-      document.removeEventListener('fullscreenchange', handleFsChange);
-      document.removeEventListener('webkitfullscreenchange', handleFsChange);
-    };
-  }, []);
-
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-      if (document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen().catch(() => {});
-      } else if (document.documentElement.webkitRequestFullscreen) {
-        document.documentElement.webkitRequestFullscreen();
-      }
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen().catch(() => {});
-      } else if (document.webkitExitFullscreen) {
-        document.webkitExitFullscreen();
-      }
-    }
-  };
 
   // Listen for unread count updates
   useEffect(() => {
@@ -259,17 +229,6 @@ export const Navbar = () => {
                 the drawer is shorter than its content, which makes the top of the
                 menu impossible to scroll back to. */}
             <div className="mt-auto pt-4 border-t border-slate-800 space-y-2">
-              <button
-                onClick={() => {
-                  toggleFullscreen();
-                  setMobileDrawerOpen(false);
-                }}
-                className="w-full p-2.5 rounded-xl bg-slate-800/90 hover:bg-slate-750 text-slate-200 text-xs font-bold flex items-center justify-center gap-2 border border-slate-700/60 transition-all cursor-pointer"
-              >
-                {isFullscreen ? <Minimize2 className="w-4 h-4 text-emerald-400" /> : <Maximize2 className="w-4 h-4 text-sky-400" />}
-                <span>{isFullscreen ? t('Exit Fullscreen', 'ከሙሉ ገጽ ውጣ') : t('Fullscreen Mode', 'ሙሉ ገጽ ሁነታ')}</span>
-              </button>
-
               <button
                 onClick={() => {
                   setMobileDrawerOpen(false);
