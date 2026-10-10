@@ -1898,13 +1898,7 @@ export const MerchantDashboard = () => {
           {escalationCases
             .filter(c => c.court_letter_issued && !c.court_letter_sent_at && c.status !== 'RESOLVED' && c.status !== 'CLOSED')
             .map(ec => {
-              const issuedAt = ec.court_letter_issued_at ? new Date(ec.court_letter_issued_at) : null;
-              const deadline = issuedAt
-                ? new Date(issuedAt.getTime() + (ec.grace_period_days || 0) * 86400000)
-                : null;
-              const daysLeft = deadline
-                ? Math.max(0, Math.ceil((deadline.getTime() - Date.now()) / 86400000))
-                : null;
+              const daysLeft = ec.days_until_court_letter ?? null;
               const dueDate = ec.due_date ? String(ec.due_date).split('T')[0] : 'N/A';
               const letterRef = ec.court_letter_ref || ec.transaction_ref || 'N/A';
               return (
@@ -1924,15 +1918,15 @@ export const MerchantDashboard = () => {
                       <p className="text-[10px] text-slate-400 mt-1">
                         {daysLeft !== null && daysLeft > 0
                           ? t(
-                              `You have ${daysLeft} day${daysLeft === 1 ? '' : 's'} left to settle in full before this is referred to court.`,
-                              `ከዳኝነት በመቅረብበት በፊት ${daysLeft} ቀን ${daysLeft === 1 ? 'ቀን' : 'ቀናት'} ያለዎት ነው።`
+                              `You can send this court letter in ${daysLeft} day${daysLeft === 1 ? '' : 's'}, once the customer's 7-day warning ends.`,
+                              `የደንበኛው የ7 ቀን ማስጠንቀቂያ ካለቀ በኋላ ይህን ደብዳቤ በ${daysLeft} ቀናት መላክ ይችላሉ።`
                             )
-                          : t('Settle in full immediately to avoid legal action.', 'የሕግ እርምጃ እንዳይወሰዱ ወዲያውኑ ሙሉ በሙሉ ይከፍሉ።')}
+                          : t('The 7-day warning is over. Send the court letter from the case below.', 'የ7 ቀን ማስጠንቀቂያ አልፏል። ከታች ካለው ጉዳይ የፍርድ ቤት ደብዳቤ ይላኩ።')}
                       </p>
                       <p className="text-[10px] text-slate-400 mt-1">
                         {t(
-                          'This letter is already on your page and counts from today. The shop has not yet sent it to you by SMS.',
-                          'ይህ ደብዳቤ በዚህ ጊዜ በገጹ ላይ ተቀምጧል። ድሽንግ ጎዳናው እስካሁን በኤስኤምኤስ አልላከውም።'
+                          'The letter is on the customer\'s page. It will only be sent to them by SMS once the 7-day warning ends.',
+                          'ደብዳቤው በደንበኛው ገጽ ላይ ይገኛል። የ7 ቀን ማስጠንቀቂያ ካለቀ በኋላ ብቻ በኤስኤምኤስ ይላካል።'
                         )}
                       </p>
                     </div>
@@ -2019,12 +2013,12 @@ export const MerchantDashboard = () => {
                     }`}>
                       {ec.court_letter_can_be_sent
                         ? t(
-                            `The ${ec.grace_period_days} day grace period is over. The letter has been on the customer's page the whole time and is ready to be sent to them by SMS.`,
-                            `${ec.grace_period_days} ቀናት ጊዜ አልፏል። ደብዳቤው ሙሉ በሙሉ ጊዜ በደንበኛው በገጹ ላይ ነብቷ ሲሆን በኤስኤምኤስ ለመላክ ተዘጋጅቷል።`
+                            `The 7-day warning period is over. The letter has been on the customer's page the whole time and is ready to be sent to them by SMS.`,
+                            `የ7 ቀን የማስጠንቀቂያ ጊዜ አልፏል። ደብዳቤው ሙሉ በሙሉ ጊዜ በደንበኛው በገጹ ላይ ነብቷ ሲሆን በኤስኤምኤስ ለመላክ ተዘጋጅቷል።`
                           )
                         : t(
-                            `The court letter is on the customer's Smart Dube page. You can send it to them by SMS in ${ec.days_until_court_letter} day${ec.days_until_court_letter === 1 ? '' : 's'}, once the ${ec.grace_period_days} day grace period is over.`,
-                            `የፍርድ ቤት ደብዳቤው በደንበኛው በገጹ ላይ ይገኛል። በ${ec.grace_period_days} ቀናት ጊዜ ከፍተኗ በኋላ በ${ec.days_until_court_letter} ቀናት በኤስኤምኤስ ማስታወቅ ይችላሉ።`
+                            `The court letter is on the customer's Smart Dube page. It will only unlock for sending in ${ec.days_until_court_letter} day${ec.days_until_court_letter === 1 ? '' : 's'}, once the customer has had the full 7-day warning.`,
+                            `የፍርድ ቤት ደብዳቤው በደንበኛው በገጹ ላይ ይገኛል። ደንበኛው ሙሉ የ7 ቀን ማስጠንቀቂያ ካገኘ በኋላ በ${ec.days_until_court_letter} ቀናት በኤስኤምኤስ ማስታወቅ ይችላሉ።`
                           )}
                     </p>
                   )}
@@ -2043,8 +2037,8 @@ export const MerchantDashboard = () => {
                           disabled={escalationActionId === ec.id + 'COURT_LETTER' || !ec.court_letter_can_be_sent}
                           title={!ec.court_letter_can_be_sent
                             ? t(
-                                `Available in ${ec.days_until_court_letter} day(s), once the ${ec.grace_period_days} day grace period is over.`,
-                                `በ${ec.grace_period_days} ቀናት ጊዜ ከፍተኗ በኋላ በ${ec.days_until_court_letter} ቀናት በኋላ ይሰራል።`
+                                `Available in ${ec.days_until_court_letter} day(s), after the 7-day warning period ends.`,
+                                `ከ7 ቀን የማስጠንቀቂያ ጊዜ በኋላ በ${ec.days_until_court_letter} ቀናት ይሰራል።`
                               )
                             : undefined}
                           className="px-3 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/30 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-red-600/20"

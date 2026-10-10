@@ -445,22 +445,24 @@ async function sendCourtLetter(caseId, options = {}) {
     throw new Error('The court letter has already been sent to this customer.');
   }
 
-  // The wait is the whole point of the ladder: the letter sat on the customer's
-  // page for the full grace period before anyone told them it was there. Refuse
-  // early rather than shorten a period they were already given in writing.
+  // The wait is the whole point of the ladder: the customer gets a full week of
+  // warnings after the letter reaches their page before the merchant may notify
+  // them of it. A court letter is never sent before that. Refuse early rather
+  // than shorten a warning the customer was already given in writing.
   if (!options.allowResend) {
     const graceDays = escalationCase.warning_period_days || WARNING_PERIOD_DAYS;
 
     if (!escalationCase.warning_sent_at) {
-      throw new Error(`An overdue warning must be sent before the court letter can be sent. Wait ${graceDays} days after that.`);
+      throw new Error(`An overdue warning must be sent before the court letter can be sent.`);
     }
 
+    // Count from when the warning SMS went out: that is the start of the week.
     const elapsed = daysSince(escalationCase.warning_sent_at);
     if (elapsed < graceDays) {
       const remaining = graceDays - elapsed;
       throw new Error(
         `The court letter can be sent in ${remaining} day${remaining === 1 ? '' : 's'}. ` +
-        `The customer must be given the full ${graceDays} day grace period.`
+        `The customer must first receive the full ${graceDays} day warning.`
       );
     }
   }
@@ -852,7 +854,9 @@ async function getEscalationCases(merchantId) {
     const gracePeriod = row.warning_period_days || WARNING_PERIOD_DAYS;
     const elapsed = daysSince(row.warning_sent_at);
     // Days left before the merchant may notify the customer of the court letter,
-    // or null once they have. Zero means the button is now available.
+    // or null once they have. Zero means the button is now available. There is no
+    // separate grace deadline: the 7-day warning after the letter reaches the
+    // customer's page is the only gate.
     const daysUntilCourtLetter = row.court_letter_sent_at
       ? null
       : row.warning_sent_at

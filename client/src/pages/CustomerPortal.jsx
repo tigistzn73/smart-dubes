@@ -363,15 +363,11 @@ export const CustomerPortal = () => {
     return issued;
   };
 
-  // Only debts whose court-letter grace deadline has passed AND whose court
-  // letter has actually been sent (roughly one week after the deadline) are
-  // referred to the court organization. Until both hold, online repayment stays
-  // open; after them the customer may only accept the letter.
-  const expiredCourtLetters = activeCourtLetters.filter(n => {
-    if (!n.notified_by_sms) return false;
-    const d = courtLetterDeadline(n);
-    return d ? d.getTime() < Date.now() : false;
-  });
+  // A debt becomes "referred to the court organization" the moment the court
+  // letter has actually been sent to the customer (after their 7-day warning).
+  // Until that send, online repayment stays open; after it the customer may only
+  // accept the letter. There is no separate grace deadline anymore.
+  const expiredCourtLetters = activeCourtLetters.filter(n => n.notified_by_sms);
   const courtLetterTxIds = new Set(
     expiredCourtLetters.map(n => Number(n.transaction_id)).filter(Boolean)
   );
@@ -713,11 +709,7 @@ export const CustomerPortal = () => {
             <div className="space-y-6">
               {/* Court Letter Warning — only rendered while the debt is unpaid */}
               {activeCourtLetters.map(n => {
-                const deadline = courtLetterDeadline(n);
-                const expired = deadline ? deadline.getTime() < Date.now() && !!n.notified_by_sms : true;
-                const daysLeft = deadline
-                  ? Math.max(0, Math.ceil((deadline.getTime() - Date.now()) / 86400000))
-                  : null;
+                const referred = !!n.notified_by_sms;
                 return (
                   <div
                     key={n.id}
@@ -738,23 +730,21 @@ export const CustomerPortal = () => {
                           )}
                         </p>
                         <p className="text-xs text-red-300/80">
-                          {expired
+                          {referred
                             ? t(
-                                'The settlement deadline has passed. Online repayment for this debt is closed. The case has been referred to the court organization — please accept the court letter to confirm you received it. Settlement is handled by the court.',
-                                'የክፍያ ጊዜው አልፏል። የዚህ ዕዳ የመስመር ላይ ክፍያ ተዘግቷል። ጉዳዩ ወደ ፍርድ ቤት ተመርቷል — ደብዳቤው መድረሱን ለማረጋገጥ እባክዎ ተቀብለው ያረጋግጡ። ክፍያው በፍርድ ቤት ይከናወናል።'
+                                'Online repayment for this debt is closed. The court letter has been sent and the case referred to the court organization — please accept the court letter to confirm you received it. Settlement is handled by the court.',
+                                'የዚህ ዕዳ የመስመር ላይ ክፍያ ተዘግቷል። የዳኝነት ደብዳቤው ተልኳል ጉዳዩም ወደ ፍርድ ቤት ተመርቷል — መድረሱን ለማረጋገጥ እባክዎ ደብዳቤውን ይቀበሉ። ክፍያው በፍርድ ቤት ይከናወናል።'
                               )
-                            : daysLeft !== null
-                            ? t(
-                                `You have ${daysLeft} day${daysLeft === 1 ? '' : 's'} left to settle in full before this is referred to court.`,
-                                `ከዳኝነት በመቅረብበት በፊት ${daysLeft} ቀን ${daysLeft === 1 ? 'ቀን' : 'ቀናት'} ያለዎት ነው።`
-                              )
-                            : t('Settle in full immediately to avoid legal action.', 'የሕግ እርምጃ እንዳይወሰዱ ወዲያውኑ ሙሉ በሙሉ ይከፍሉ።')}
+                            : t(
+                                'You have been sent a 7-day warning to settle this debt. You can still pay it in full now — once the warning ends the court letter is sent and online repayment closes.',
+                                'የዚህ ዕዳ ለመክፈል የ7 ቀን ማስጠንቀቂያ ተልክሎልዎታል። አሁኑኑ ሙሉ በሙሉ መክፈል ይችላሉ — ማስጠንቀቂያው ካለቀ በኋላ ደብዳቤው ይላካል እና የመስመር ላይ ክፍያው ይዘጋል።'
+                              )}
                         </p>
-                        {!n.notified_by_sms && (
+                        {!referred && (
                           <p className="text-[11px] text-red-200/70">
                             {t(
-                              'This letter is already on your page and counts from today. The shop has not yet sent it to you by SMS.',
-                              'ይህ ደብዳቤ በዚህ ጊዜ በገጹ ላይ ተቀምጧል። ድሽንግ ጎዳናው እስካሁን በኤስኤምኤስ አልላከውም።'
+                              'The letter is on your page now. The shop will only send it to you by SMS after the 7-day warning ends.',
+                              'ደብዳቤው በገጽዎ ላይ ተቀምጧል። ሱቁ የ7 ቀን ማስጠንቀቂያ ካለቀ በኋላ ብቻ በኤስኤምኤስ ይልከዋል።'
                             )}
                           </p>
                         )}
@@ -776,7 +766,7 @@ export const CustomerPortal = () => {
                       >
                         {t('Read The Court Letter', 'ደብዳቤውን አንብብ')}
                       </button>
-                      {!expired && n.transaction_id && (
+                      {!referred && n.transaction_id && (
                         <button
                           onClick={() => {
                             const tx = transactions.find(t => t.id === n.transaction_id);
@@ -791,7 +781,7 @@ export const CustomerPortal = () => {
                           {t('Pay This Debt Now', 'አሁኑ ይክፈሉ')}
                         </button>
                       )}
-                      {expired && !n.is_acknowledged && (
+                      {referred && !n.is_acknowledged && (
                         <button
                           onClick={() => handleAcknowledgeCourtLetter(n)}
                           disabled={acknowledgingLetterId === n.id}

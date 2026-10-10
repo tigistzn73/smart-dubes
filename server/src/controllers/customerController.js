@@ -258,7 +258,6 @@ async function initiateRepayment(req, res) {
             AND ec.escalation_type = 'COURT_LETTER'
             AND ec.court_letter_issued_at IS NOT NULL
             AND ec.court_letter_sent_at IS NOT NULL
-            AND ec.court_letter_issued_at + COALESCE(ec.warning_period_days, 7) * INTERVAL '1 day' < NOW()
             AND ec.status NOT IN ('RESOLVED', 'CLOSED')
             ${scopeClause}
           ORDER BY ec.court_letter_issued_at DESC
@@ -676,7 +675,6 @@ async function saveCustomerSchedule(req, res) {
             AND ec.escalation_type = 'COURT_LETTER'
             AND ec.court_letter_issued_at IS NOT NULL
             AND ec.court_letter_sent_at IS NOT NULL
-            AND ec.court_letter_issued_at + COALESCE(ec.warning_period_days, 7) * INTERVAL '1 day' < NOW()
             AND ec.status NOT IN ('RESOLVED', 'CLOSED')
             ${scopeClause}
           ORDER BY ec.court_letter_issued_at DESC
