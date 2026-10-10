@@ -393,11 +393,31 @@ export const CustomerPortal = () => {
   const repayments = data?.repayments || [];
   const profiles = data?.profiles || [];
 
-  // Receipts still awaiting payment, and the subset the current store filter shows
+  // Receipts standing on an ACTIVE repayment schedule are paid through that
+  // plan's installments, so they are hidden from the itemized pending list and
+  // only shown as Active Schedule cards above. A per-receipt plan (transaction_id
+  // set) covers that one receipt; a store-level plan (transaction_id null) covers
+  // the whole outstanding balance of that customer profile.
+  const allActiveSchedules = data?.activeSchedules || (data?.activeSchedule ? [data.activeSchedule] : []);
+  const scheduledTransactionIds = new Set();
+  allActiveSchedules.forEach(s => {
+    if (s.transaction_id) {
+      scheduledTransactionIds.add(Number(s.transaction_id));
+    } else if (s.customer_id) {
+      pendingTransactions.forEach(tx => {
+        if (Number(tx.customer_id) === Number(s.customer_id)) scheduledTransactionIds.add(Number(tx.id));
+      });
+    }
+  });
+  const unscheduledPendingTransactions = pendingTransactions.filter(tx => !scheduledTransactionIds.has(Number(tx.id)));
+
+  // Receipts still awaiting a schedule/payment, and the subset the current store
+  // filter shows. Scheduled receipts are excluded so the itemized panel only ever
+  // lists receipts the customer still needs to schedule or pay directly.
   const filteredPendingTransactions = (() => {
-    if (selectedMerchantFilter === 'ALL') return pendingTransactions;
+    if (selectedMerchantFilter === 'ALL') return unscheduledPendingTransactions;
     const selectedProf = profiles.find(p => String(p.merchant_id) === String(selectedMerchantFilter));
-    return pendingTransactions.filter(tx =>
+    return unscheduledPendingTransactions.filter(tx =>
       (tx.merchant_id && String(tx.merchant_id) === String(selectedMerchantFilter)) ||
       (selectedProf && tx.customer_id === selectedProf.id) ||
       (selectedProf && tx.store_name === selectedProf.store_name)
@@ -1228,11 +1248,13 @@ export const CustomerPortal = () => {
                 })()}
               </div>
 
-              {/* Itemized Dube Receipts (Filtered or All) */}
+              {/* Itemized Dube Receipts (Filtered or All) — scheduled receipts are
+                  hidden here; they are shown and paid through the Active Schedule
+                  cards above, so the panel only lists unscheduled receipts. */}
               {(() => {
                 const displayedPendingTransactions = selectedMerchantFilter === 'ALL'
-                  ? pendingTransactions
-                  : pendingTransactions.filter(tx => {
+                  ? unscheduledPendingTransactions
+                  : unscheduledPendingTransactions.filter(tx => {
                       const selectedProf = profiles.find(p => String(p.merchant_id) === String(selectedMerchantFilter));
                       return (tx.merchant_id && String(tx.merchant_id) === String(selectedMerchantFilter)) ||
                         (selectedProf && tx.customer_id === selectedProf.id) ||
@@ -1306,13 +1328,22 @@ export const CustomerPortal = () => {
                     )}
 
                     {displayedPendingTransactions.length === 0 ? (
-                      pendingTransactions.length > 0 && selectedMerchantFilter !== 'ALL' ? (
+                      pendingTransactions.length > 0 && unscheduledPendingTransactions.length === 0 ? (
+                        <div className="text-center py-8 space-y-2">
+                          <p className="text-slate-500 text-xs">
+                            {t('All of your pending Dube receipts are covered by an active repayment schedule.', 'ሁሉም ያልተከፈሉ የዱቤ ደረሰኞችዎ ገባሪ የክፍያ መርሐ-ግብር አላቸው።')}
+                          </p>
+                          <p className="text-slate-400 text-xs font-mono">
+                            {t('View your active schedule above and pay the installments there.', 'ከላይ ያለዎትን ገባሪ የጊዜ ሰሌዳ ተመልክተው ክፍልፋዮቹን እዚያ ይክፈሉ።')}
+                          </p>
+                        </div>
+                      ) : unscheduledPendingTransactions.length > 0 && selectedMerchantFilter !== 'ALL' ? (
                         <div className="text-center py-8 space-y-2">
                           <p className="text-slate-500 text-xs">
                             {t('No pending receipts under this store filter.', 'በይሄ የስሟት ማጣሪያ ምንም ያልተከፈለ ደረሰኞ አልተገኘም።')}
                           </p>
                           <p className="text-slate-400 text-xs font-mono">
-                            {t(`${pendingTransactions.length} receipt(s) at other stores are hidden.`, `${pendingTransactions.length} በሌሎች ሱቆች ያሉ ደረሰኞች ተደብቀዋል።`)}
+                            {t(`${unscheduledPendingTransactions.length} receipt(s) at other stores are hidden.`, `${unscheduledPendingTransactions.length} በሌሎች ሱቆች ያሉ ደረሰኞች ተደብቀዋል።`)}
                           </p>
                           <button
                             onClick={() => setSelectedMerchantFilter('ALL')}
