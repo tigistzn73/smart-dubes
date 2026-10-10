@@ -111,6 +111,43 @@ async function getCustomerDashboard(req, res) {
     `, [req.user.id]);
 
     const activeSchedules = [];
+    // Keep legacy store-level plans (transaction_id null) in step with the real
+    // outstanding balance: if an ACTIVE plan has no paid installment yet and no
+    // longer covers the store's actual debt, rebuild its installments for the full
+    // amount so the schedule card and the receipt list always agree on the total.
+    // Per-receipt plans (transaction_id set) are exact by construction, and plans
+    // the customer has already paid into are left untouched so progress is kept.
+    for (const sRow of scheduleRows) {
+      if (sRow.transaction_id) continue;
+      const planInsts = JSON.parse(sRow.installments_json || '[]');
+      if (planInsts.some(i => i.status === 'PAID')) continue;
+      const planTotal = parseFloat(sRow.total_amount || 0);
+      const storeOutstanding = formattedTx
+        .filter(tx => Number(tx.customer_id) === Number(sRow.customer_id))
+        .reduce((sum, tx) => sum + parseFloat(tx.remaining_amount || 0), 0);
+      if (!(storeOutstanding > planTotal + 0.01)) continue;
+      try {
+        const rebuilt = await calculateFlexibleInstallments(
+          req.user.id,
+          storeOutstanding,
+          sRow.frequency || 'WEEKLY',
+          null,
+          planInsts.length || 2,
+          sRow.merchant_id,
+          null,
+          null
+        );
+        const rebuiltJson = JSON.stringify(rebuilt.installments);
+        await db.run(`UPDATE customer_schedules SET total_amount = $1, installments_json = $2 WHERE id = $3`, [
+          rebuilt.amount, rebuiltJson, sRow.id
+        ]);
+        sRow.total_amount = rebuilt.amount;
+        sRow.installments_json = rebuiltJson;
+      } catch (recalcErr) {
+        console.error('Schedule resync error:', recalcErr.message);
+      }
+    }
+
     for (const sRow of scheduleRows) {
       const insts = JSON.parse(sRow.installments_json || '[]');
       const allPaid = insts.length > 0 && insts.every(i => i.status === 'PAID');

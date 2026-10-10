@@ -1116,6 +1116,10 @@ export const CustomerPortal = () => {
 
                           <div className="text-left sm:text-right">
                             <span className="text-[10px] text-slate-500 font-mono">
+                              {t('Total Dube:', 'ጠቅላላ ዱቤ፦')} <span className="text-amber-600 font-extrabold">{matchingSchedule.installments.reduce((s, i) => s + parseFloat(i.amount || 0), 0).toFixed(2)} ETB</span>
+                            </span>
+                            <br className="hidden sm:block" />
+                            <span className="text-[10px] text-slate-500 font-mono">
                               {t('Progress:', 'ሂደት፦')} <span className="text-emerald-600 font-bold">{paidCount} / {totalCount}</span> {t('Paid', 'ተከፍሏል')}
                             </span>
                             <div className="w-36 h-2 bg-slate-200 rounded-full mt-1 overflow-hidden border border-slate-300">
