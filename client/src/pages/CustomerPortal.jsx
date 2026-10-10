@@ -294,7 +294,14 @@ export const CustomerPortal = () => {
   };
 
   const toggleSelectAllVisible = () => {
-    const visibleIds = filteredPendingTransactions.map(tx => tx.id);
+    // Receipts with an uploaded payment still under merchant review are not
+    // selectable; they cannot be scheduled again until the merchant approves.
+    const lockedIds = new Set(
+      (data?.repayments || [])
+        .filter(r => r.status === 'PENDING' && r.transaction_id)
+        .map(r => Number(r.transaction_id))
+    );
+    const visibleIds = filteredPendingTransactions.filter(tx => !lockedIds.has(Number(tx.id))).map(tx => tx.id);
     const allSelected = visibleIds.length > 0 && visibleIds.every(id => selectedTxIds.includes(id));
     setSelectedTxIds(prev => (allSelected
       ? prev.filter(id => !visibleIds.includes(id))
@@ -393,17 +400,29 @@ export const CustomerPortal = () => {
   const repayments = data?.repayments || [];
   const profiles = data?.profiles || [];
 
+  const allActiveSchedules = data?.activeSchedules || (data?.activeSchedule ? [data.activeSchedule] : []);
+  // Uploaded payment receipts still awaiting merchant review/approval. Until the
+  // merchant checks and approves (or rejects) the uploaded receipt, the covered
+  // Dube receipt must stay visible here as a red "PENDING REVIEW" row instead of
+  // being hidden, so the customer knows their payment is being confirmed.
+  const pendingReviewTxIds = new Set(
+    (repayments || [])
+      .filter(r => r.status === 'PENDING' && r.transaction_id)
+      .map(r => Number(r.transaction_id))
+  );
   // Receipts standing on a DEDICATED ACTIVE repayment schedule (a plan tied to
   // that exact receipt via customer_schedules.transaction_id) are paid through
   // that plan's installments, so they are hidden from the itemized pending list
-  // and only shown as Active Schedule cards above. Store-level/aggregate plans
-  // (transaction_id null) do NOT blank out other receipts at that store: any
-  // receipt without its own plan must stay visible so it can be scheduled or
-  // paid directly.
-  const allActiveSchedules = data?.activeSchedules || (data?.activeSchedule ? [data.activeSchedule] : []);
+  // and only shown as Active Schedule cards above — unless a payment is currently
+  // PENDING REVIEW, in which case the receipt is kept visible. Store-level/aggregate
+  // plans (transaction_id null) do NOT blank out other receipts at that store: any
+  // receipt without its own plan must stay visible so it can be scheduled or paid
+  // directly.
   const scheduledTransactionIds = new Set();
   allActiveSchedules.forEach(s => {
-    if (s.transaction_id) scheduledTransactionIds.add(Number(s.transaction_id));
+    if (s.transaction_id && !pendingReviewTxIds.has(Number(s.transaction_id))) {
+      scheduledTransactionIds.add(Number(s.transaction_id));
+    }
   });
   const unscheduledPendingTransactions = pendingTransactions.filter(tx => !scheduledTransactionIds.has(Number(tx.id)));
 
@@ -1379,21 +1398,25 @@ export const CustomerPortal = () => {
                             s.transaction_id && Number(s.transaction_id) === Number(tx.id)
                           );
                           const isScheduled = linkedSchedule && linkedSchedule.installments?.some(i => i.status !== 'PAID');
+                          const isPendingReview = pendingReviewTxIds.has(Number(tx.id));
                           const isSelected = selectedTxIds.includes(tx.id);
 
                           return (
                             <div
                               key={tx.id}
                               className={`bg-slate-900/70 p-4 rounded-xl border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-colors ${
-                                isSelected ? 'border-emerald-500/50 bg-slate-900' : 'border-slate-800'
+                                isPendingReview
+                                  ? 'border-red-500/50 bg-red-500/5'
+                                  : isSelected ? 'border-emerald-500/50 bg-slate-900' : 'border-slate-800'
                               }`}
                             >
                               <div className="flex items-start gap-3 flex-1 min-w-0">
                                 <input
                                   type="checkbox"
                                   checked={isSelected}
+                                  disabled={isPendingReview}
                                   onChange={() => toggleTxSelection(tx.id)}
-                                  className="mt-1 w-4 h-4 shrink-0 accent-emerald-500 cursor-pointer"
+                                  className="mt-1 w-4 h-4 shrink-0 accent-emerald-500 cursor-pointer disabled:cursor-not-allowed"
                                 />
                                 <div className="space-y-1 min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
@@ -1404,12 +1427,14 @@ export const CustomerPortal = () => {
                                     className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
                                       tx.status === 'SETTLED'
                                         ? 'bg-emerald-500/20 text-emerald-400'
+                                        : isPendingReview
+                                        ? 'bg-red-500/25 text-red-300 ring-1 ring-red-500/40'
                                         : tx.status === 'OVERDUE'
                                         ? 'bg-red-500/20 text-red-400'
                                         : 'bg-amber-500/20 text-amber-400'
                                     }`}
                                   >
-                                    {tx.status === 'SETTLED' ? t('SETTLED', 'የተከፈለ') : tx.status === 'OVERDUE' ? t('OVERDUE', 'ቀን ያለፈበት') : t('PENDING', 'ያልተከፈለ')}
+                                    {tx.status === 'SETTLED' ? t('SETTLED', 'የተከፈለ') : isPendingReview ? t('PENDING REVIEW', 'በግምገማ ላይ') : tx.status === 'OVERDUE' ? t('OVERDUE', 'ቀን ያለፈበት') : t('PENDING', 'ያልተከፈለ')}
                                   </span>
                                   {isScheduled && (
                                     <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-sky-500/20 text-sky-400 border border-sky-500/30">
@@ -1426,6 +1451,12 @@ export const CustomerPortal = () => {
                                     </span>
                                   ))}
                                 </div>
+                                {isPendingReview && (
+                                  <p className="text-[11px] font-bold text-red-400 flex items-center gap-1">
+                                    <Clock className="w-3.5 h-3.5" />
+                                    {t('Payment receipt uploaded — awaiting merchant review', 'የክፍያ ደረሰኝ ተጭኗል — በባለሱቅ ግምገማ ላይ')}
+                                  </p>
+                                )}
                                 </div>
                               </div>
 
@@ -1434,12 +1465,18 @@ export const CustomerPortal = () => {
                                   <p className="text-xs text-slate-500">
                                     {t('Due Date:', 'የመክፈያ ቀን፦')} {tx.due_date ? String(tx.due_date).split('T')[0] : 'N/A'}
                                   </p>
-                                  <p className="font-extrabold text-amber-400 text-base">
+                                  <p className={`font-extrabold text-base ${isPendingReview ? 'text-red-400' : 'text-amber-400'}`}>
                                     {realDubeAmount(tx).toFixed(2)} ETB
                                   </p>
                                 </div>
 
                                 {tx.status !== 'SETTLED' && (
+                                  isPendingReview ? (
+                                    <span className="px-4 py-2 rounded-xl bg-red-500/15 text-red-300 border border-red-500/40 text-xs font-extrabold flex items-center gap-1.5 whitespace-nowrap">
+                                      <Clock className="w-3.5 h-3.5" />
+                                      {t('Pending Review', 'በግምገማ ላይ')}
+                                    </span>
+                                  ) : (
                                   <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
                                     {/* Schedule Button side by side with the Pay button */}
                                     <button
@@ -1458,23 +1495,18 @@ export const CustomerPortal = () => {
                                         panel. Installment amounts belong on the Active Schedule
                                         cards above, never here — showing 250 for a 1000 ETB
                                         receipt is the exact bug a scheduled row used to cause. */}
-                                    {isScheduled ? (
-                                      <span className="px-3 py-2 rounded-xl bg-sky-500/10 text-sky-300 border border-sky-500/30 text-xs font-bold">
-                                        {t('Pay via schedule above', 'ከላይ ባለው የጊዜ ሰሌዳ ይክፈሉ')}
-                                      </span>
-                                    ) : (
-                                      <button
-                                        onClick={() => setSelectedTxForPayment({
-                                          ...tx,
-                                          total_amount: realDubeAmount(tx)
-                                        })}
-                                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 whitespace-nowrap"
-                                      >
-                                        <CreditCard className="w-3.5 h-3.5" />
-                                        <span>{t('Pay Debt', 'ዕዳ ክፈል')}</span>
-                                      </button>
-                                    )}
+                                    <button
+                                      onClick={() => setSelectedTxForPayment({
+                                        ...tx,
+                                        total_amount: realDubeAmount(tx)
+                                      })}
+                                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 whitespace-nowrap"
+                                    >
+                                      <CreditCard className="w-3.5 h-3.5" />
+                                      <span>{t('Pay Debt', 'ዕዳ ክፈል')}</span>
+                                    </button>
                                   </div>
+                                  )
                                 )}
                               </div>
                             </div>
