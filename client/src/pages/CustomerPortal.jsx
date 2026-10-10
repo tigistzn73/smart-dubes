@@ -363,6 +363,27 @@ export const CustomerPortal = () => {
     return issued;
   };
 
+  // Only debts whose court-letter grace deadline has passed AND whose court
+  // letter has actually been sent (roughly one week after the deadline) are
+  // referred to the court organization. Until both hold, online repayment stays
+  // open; after them the customer may only accept the letter.
+  const expiredCourtLetters = activeCourtLetters.filter(n => {
+    if (!n.notified_by_sms) return false;
+    const d = courtLetterDeadline(n);
+    return d ? d.getTime() < Date.now() : false;
+  });
+  const courtLetterTxIds = new Set(
+    expiredCourtLetters.map(n => Number(n.transaction_id)).filter(Boolean)
+  );
+  const courtLetterMerchantIds = new Set(
+    expiredCourtLetters.map(n => Number(n.merchant_id)).filter(Boolean)
+  );
+  const isReferredToCourt = (tx) => {
+    if (tx?.id && courtLetterTxIds.has(Number(tx.id))) return true;
+    if (tx?.merchant_id && courtLetterMerchantIds.has(Number(tx.merchant_id))) return true;
+    return false;
+  };
+
   const dismissAlert = (id) => setDismissedAlertIds(prev => [...prev, id]);
 
   const openAlerts = () => {
@@ -693,6 +714,7 @@ export const CustomerPortal = () => {
               {/* Court Letter Warning — only rendered while the debt is unpaid */}
               {activeCourtLetters.map(n => {
                 const deadline = courtLetterDeadline(n);
+                const expired = deadline ? deadline.getTime() < Date.now() && !!n.notified_by_sms : true;
                 const daysLeft = deadline
                   ? Math.max(0, Math.ceil((deadline.getTime() - Date.now()) / 86400000))
                   : null;
@@ -716,7 +738,12 @@ export const CustomerPortal = () => {
                           )}
                         </p>
                         <p className="text-xs text-red-300/80">
-                          {daysLeft !== null
+                          {expired
+                            ? t(
+                                'The settlement deadline has passed. Online repayment for this debt is closed. The case has been referred to the court organization — please accept the court letter to confirm you received it. Settlement is handled by the court.',
+                                'የክፍያ ጊዜው አልፏል። የዚህ ዕዳ የመስመር ላይ ክፍያ ተዘግቷል። ጉዳዩ ወደ ፍርድ ቤት ተመርቷል — ደብዳቤው መድረሱን ለማረጋገጥ እባክዎ ተቀብለው ያረጋግጡ። ክፍያው በፍርድ ቤት ይከናወናል።'
+                              )
+                            : daysLeft !== null
                             ? t(
                                 `You have ${daysLeft} day${daysLeft === 1 ? '' : 's'} left to settle in full before this is referred to court.`,
                                 `ከዳኝነት በመቅረብበት በፊት ${daysLeft} ቀን ${daysLeft === 1 ? 'ቀን' : 'ቀናት'} ያለዎት ነው።`
@@ -749,7 +776,7 @@ export const CustomerPortal = () => {
                       >
                         {t('Read The Court Letter', 'ደብዳቤውን አንብብ')}
                       </button>
-                      {n.transaction_id && (
+                      {!expired && n.transaction_id && (
                         <button
                           onClick={() => {
                             const tx = transactions.find(t => t.id === n.transaction_id);
@@ -762,6 +789,17 @@ export const CustomerPortal = () => {
                           className="px-3.5 py-2 rounded-xl bg-red-950/60 hover:bg-red-900/60 text-red-200 text-xs font-extrabold border border-red-500/30 transition-colors cursor-pointer"
                         >
                           {t('Pay This Debt Now', 'አሁኑ ይክፈሉ')}
+                        </button>
+                      )}
+                      {expired && !n.is_acknowledged && (
+                        <button
+                          onClick={() => handleAcknowledgeCourtLetter(n)}
+                          disabled={acknowledgingLetterId === n.id}
+                          className="px-3.5 py-2 rounded-xl bg-red-950/60 hover:bg-red-900/60 text-red-200 text-xs font-extrabold border border-red-500/30 transition-colors cursor-pointer disabled:opacity-50"
+                        >
+                          {acknowledgingLetterId === n.id
+                            ? t('Accepting...', 'በመቀበል ላይ...')
+                            : t('Accept Court Letter', 'ደብዳቤውን ተቀበል')}
                         </button>
                       )}
                     </div>
@@ -1127,6 +1165,11 @@ export const CustomerPortal = () => {
                           const planTxForPayment = linkedTx
                             || pendingTransactions.find(t => (activeProfile && t.customer_id === activeProfile.id) || (activeProfile && t.merchant_id === activeProfile.merchant_id))
                             || pendingTransactions[0];
+                          // A court letter on this receipt or store closes online
+                          // repayment: the debt is referred to the court organization.
+                          const scheduleReferred = isReferredToCourt(
+                            linkedTx || { merchant_id: activeProfile?.merchant_id }
+                          );
 
                           return (
                       <div key={matchingSchedule.id || matchingSchedule.transaction_id || 'plan'} className="p-4 sm:p-5 rounded-xl bg-white border border-slate-200 space-y-4 shadow-sm">
@@ -1234,6 +1277,11 @@ export const CustomerPortal = () => {
                                         <Clock className="w-3.5 h-3.5" />
                                         <span>{t('Pending Review', 'በግምገማ ላይ')}</span>
                                       </span>
+                                    ) : scheduleReferred ? (
+                                      <span className="px-3 py-1.5 rounded-lg text-xs bg-red-50 text-red-700 font-bold border border-red-300 flex items-center gap-1.5 font-mono">
+                                        <AlertCircle className="w-3.5 h-3.5" />
+                                        <span>{t('Referred to court', 'ወደ ፍርድ ቤት ተመርቷል')}</span>
+                                      </span>
                                     ) : (
                                       <button
                                         onClick={() => {
@@ -1278,6 +1326,12 @@ export const CustomerPortal = () => {
                           </button>
 
                           {activeProfile.current_balance > 0 && (
+                            scheduleReferred ? (
+                              <span className="px-3 py-1.5 rounded-lg bg-red-50 text-red-700 text-xs font-semibold flex items-center gap-1.5 border border-red-200">
+                                <AlertCircle className="w-3.5 h-3.5" />
+                                {t('Referred to court — online payment closed', 'ወደ ፍርድ ቤት ተመርቷል — የመስመር ላይ ክፍያ ተዘግቷል')}
+                              </span>
+                            ) : (
                             <button
                               onClick={() => {
                                 const targetTx = planTxForPayment;
@@ -1296,6 +1350,7 @@ export const CustomerPortal = () => {
                               <CreditCard className="w-3.5 h-3.5" />
                               <span>{t('Pay Remaining Debt at Once', 'ቀሪውን ሙሉ እዳ በአንድ ጊዜ ክፈል')} ({activeProfile.current_balance.toFixed(2)} ETB)</span>
                             </button>
+                            )
                           )}
                         </div>
                       </div>
@@ -1505,7 +1560,12 @@ export const CustomerPortal = () => {
                                 </div>
 
                                 {tx.status !== 'SETTLED' && (
-                                  isPendingReview ? (
+                                  isReferredToCourt(tx) ? (
+                                    <span className="px-4 py-2 rounded-xl bg-red-500/15 text-red-300 border border-red-500/40 text-xs font-extrabold flex items-center gap-1.5 whitespace-nowrap">
+                                      <AlertCircle className="w-3.5 h-3.5" />
+                                      {t('Referred to court', 'ወደ ፍርድ ቤት ተመርቷል')}
+                                    </span>
+                                  ) : isPendingReview ? (
                                     <span className="px-4 py-2 rounded-xl bg-red-500/15 text-red-300 border border-red-500/40 text-xs font-extrabold flex items-center gap-1.5 whitespace-nowrap">
                                       <Clock className="w-3.5 h-3.5" />
                                       {t('Pending Review', 'በግምገማ ላይ')}

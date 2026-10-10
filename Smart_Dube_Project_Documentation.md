@@ -268,6 +268,7 @@ erDiagram
         varchar kyc_status
         timestamptz verified_at
         varchar bank_name
+        varchar account_name
         varchar account_number
     }
 

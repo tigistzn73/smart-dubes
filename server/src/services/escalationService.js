@@ -660,7 +660,8 @@ async function getCustomerNotices(profileIds) {
   if (!Array.isArray(profileIds) || profileIds.length === 0) return [];
 
   const rows = await db.all(`
-    SELECT ec.id, ec.escalation_type, ec.status, ec.amount, ec.due_date, ec.notes,
+    SELECT ec.id, ec.transaction_id, ec.merchant_id, ec.customer_id,
+           ec.escalation_type, ec.status, ec.amount, ec.due_date, ec.notes,
            ec.warning_period_days, ec.warning_sent_at,
            ec.court_letter_ref, ec.court_letter_body, ec.court_letter_doc,
            ec.court_letter_issued_at, ec.court_letter_sent_at,

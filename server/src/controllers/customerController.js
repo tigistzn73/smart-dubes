@@ -234,6 +234,44 @@ async function initiateRepayment(req, res) {
       return res.status(400).json({ error: 'Valid repayment amount is required.' });
     }
 
+    // Once a court letter is active for a debt, that debt has been referred to
+    // the court organization: online repayment is closed and the customer may
+    // only accept the letter from the dashboard. Enforced here so the rule holds
+    // even if the client UI is bypassed.
+    const profileRows = await db.all(
+      `SELECT id FROM customer_profiles WHERE phone = $1 OR user_id = $2`,
+      [req.user.phone, req.user.id]
+    );
+    const profileIds = profileRows.map(p => p.id);
+
+    if (profileIds.length > 0) {
+      const blockParams = [profileIds];
+      let scopeClause = '';
+      if (transactionId && !isMultiMerchant) {
+        scopeClause = 'AND ec.transaction_id = $2';
+        blockParams.push(transactionId);
+      }
+      const courtBlock = await db.get(
+        `SELECT ec.court_letter_ref
+           FROM escalation_cases ec
+          WHERE ec.customer_id = ANY($1::int[])
+            AND ec.escalation_type = 'COURT_LETTER'
+            AND ec.court_letter_issued_at IS NOT NULL
+            AND ec.court_letter_sent_at IS NOT NULL
+            AND ec.court_letter_issued_at + COALESCE(ec.warning_period_days, 7) * INTERVAL '1 day' < NOW()
+            AND ec.status NOT IN ('RESOLVED', 'CLOSED')
+            ${scopeClause}
+          ORDER BY ec.court_letter_issued_at DESC
+          LIMIT 1`,
+        blockParams
+      );
+      if (courtBlock) {
+        return res.status(403).json({
+          error: 'Online repayment is closed for this debt: it has been referred to the court organization. Please accept the court letter from your dashboard. Settlement is now handled by the court.'
+        });
+      }
+    }
+
     if (isMultiMerchant || (!transactionId && !customerId)) {
       const multiResult = await processMultiMerchantRepayment({
         userId: req.user.id,
@@ -612,6 +650,45 @@ async function saveCustomerSchedule(req, res) {
 
   try {
     const numInst = parseInt(numInstallments || 2);
+
+    // A debt already under a court letter is out of online management: it is
+    // referred to the court organization, so no new repayment schedule may be
+    // created or modified for it. The customer may only accept the letter.
+    const profileRows = await db.all(
+      `SELECT id FROM customer_profiles WHERE phone = $1 OR user_id = $2`,
+      [req.user.phone, req.user.id]
+    );
+    const profileIds = profileRows.map(p => p.id);
+    if (profileIds.length > 0) {
+      const blockParams = [profileIds];
+      let scopeClause = '';
+      if (selectedIds.length === 1) {
+        scopeClause = 'AND ec.transaction_id = $2';
+        blockParams.push(selectedIds[0]);
+      } else if (selectedIds.length > 1) {
+        scopeClause = 'AND ec.transaction_id = ANY($2::int[])';
+        blockParams.push(selectedIds);
+      }
+      const courtBlock = await db.get(
+        `SELECT ec.court_letter_ref
+           FROM escalation_cases ec
+          WHERE ec.customer_id = ANY($1::int[])
+            AND ec.escalation_type = 'COURT_LETTER'
+            AND ec.court_letter_issued_at IS NOT NULL
+            AND ec.court_letter_sent_at IS NOT NULL
+            AND ec.court_letter_issued_at + COALESCE(ec.warning_period_days, 7) * INTERVAL '1 day' < NOW()
+            AND ec.status NOT IN ('RESOLVED', 'CLOSED')
+            ${scopeClause}
+          ORDER BY ec.court_letter_issued_at DESC
+          LIMIT 1`,
+        blockParams
+      );
+      if (courtBlock) {
+        return res.status(403).json({
+          error: 'This debt is referred to the court organization. You can only accept the court letter from your dashboard; repayment is closed.'
+        });
+      }
+    }
 
     // More than one receipt: one independent plan per receipt, each anchored to
     // that receipt's own due date
