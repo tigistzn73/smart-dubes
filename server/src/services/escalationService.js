@@ -623,8 +623,12 @@ async function checkAndEscalateOverdue() {
 }
 
 /**
- * Court letters issued against any of this customer's merchant ledgers.
- * CLOSED cases are withheld because the creditor withdrew the notice.
+ * Court letters sent against any of this customer's merchant ledgers. Only
+ * letters that have actually been sent are shown — a court letter only exists
+ * once the merchant sends it after the 7-day warning. Legacy rows that were
+ * issued years-ago but never sent stay hidden: before the send, the customer
+ * was only ever warned. CLOSED cases are withheld because the creditor
+ * withdrew the notice.
  */
 async function getCustomerNotices(profileIds) {
   // Guard the array shape explicitly. A bare number would otherwise slip past the
@@ -648,6 +652,7 @@ async function getCustomerNotices(profileIds) {
     WHERE ec.customer_id = ANY($1::int[])
       AND ec.escalation_type = 'COURT_LETTER'
       AND ec.court_letter_issued_at IS NOT NULL
+      AND ec.court_letter_sent_at IS NOT NULL
       AND ec.status <> 'CLOSED'
     ORDER BY ec.court_letter_issued_at DESC
   `, [profileIds]);
