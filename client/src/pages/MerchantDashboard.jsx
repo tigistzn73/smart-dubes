@@ -33,7 +33,8 @@ import {
   Menu,
   Maximize2,
   Minimize2,
-  Store
+  Store,
+  Landmark
 } from 'lucide-react';
 import { getErrorMessage, isValidEthiopianPhone } from '../utils/errorHelper';
 
@@ -142,6 +143,7 @@ export const MerchantDashboard = () => {
   const [bankForm, setBankForm] = useState({ bankName: '', accountName: '', accountNumber: '' });
   const [bankSaving, setBankSaving] = useState(false);
   const [bankMessage, setBankMessage] = useState(null);
+  const [bankModalOpen, setBankModalOpen] = useState(false);
 
   // Customer Profile Registration State
   const [customerRegError, setCustomerRegError] = useState('');
@@ -249,6 +251,7 @@ export const MerchantDashboard = () => {
         accountNumber: data.bankAccount.account_number || ''
       });
       setBankMessage({ type: 'success', text: data.message });
+      setBankModalOpen(false);
     } catch (err) {
       setBankMessage({ type: 'error', text: getErrorMessage(err) });
     } finally {
@@ -818,6 +821,15 @@ export const MerchantDashboard = () => {
                   <span>{t('Log Dube Sale', 'የዱቤ ሽያጭ መዝግብ')}</span>
                 </button>
 
+                {/* Bank Settings */}
+                <button
+                  onClick={() => { setMobileSidebarOpen(false); setBankModalOpen(true); }}
+                  className={`w-full p-3 rounded-xl text-xs font-bold transition-all flex items-center gap-3 border cursor-pointer text-slate-400 hover:text-slate-200 bg-transparent border-transparent hover:bg-slate-850`}
+                >
+                  <Landmark className="w-4 h-4 shrink-0" />
+                  <span>{t('Bank Settings', 'የባንክ ቅንብሮች')}</span>
+                </button>
+
                 {/* Remaining Navigation Items */}
                 {[
                   { id: 'CUSTOMERS', name: t('Customer Ledgers', 'የደንበኞች ሌጀር'), icon: Users, count: customers.length },
@@ -931,6 +943,18 @@ export const MerchantDashboard = () => {
               <div className="flex items-center gap-2.5">
                 <ShoppingBag className="w-4 h-4 shrink-0" />
                 <span className={`hidden ${sidebarCollapsed ? '' : 'md:inline'} whitespace-nowrap`}>{t('Log Dube Sale', 'የዱቤ ሽያጭ መዝግብ')}</span>
+              </div>
+            </button>
+
+            {/* Bank Settings */}
+            <button
+              onClick={() => setBankModalOpen(true)}
+              className={`w-full p-2 md:px-3 md:py-2.5 ${sidebarCollapsed ? 'md:justify-center' : 'justify-center md:justify-between'} rounded-xl text-xs font-bold transition-all flex items-center border cursor-pointer text-slate-400 hover:text-slate-200 bg-transparent border-transparent hover:bg-slate-900/40`}
+              title={t('Bank Settings', 'የባንክ ቅንብሮች')}
+            >
+              <div className="flex items-center gap-2.5">
+                <Landmark className="w-4 h-4 shrink-0" />
+                <span className={`hidden ${sidebarCollapsed ? '' : 'md:inline'} whitespace-nowrap`}>{t('Bank Settings', 'የባንክ ቅንብሮች')}</span>
               </div>
             </button>
 
@@ -1296,83 +1320,6 @@ export const MerchantDashboard = () => {
                 <p className="text-xl font-black text-emerald-400 mt-1">{(totalLimit - totalOutstanding).toFixed(2)} ETB</p>
               </div>
             </div>
-
-            {/* Bank Account Details for Customer Payments */}
-            <form noValidate onSubmit={saveBankAccount} className="glass-card p-5 rounded-2xl border border-slate-800/80 space-y-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono flex items-center gap-2">
-                    <Receipt className="w-4 h-4 text-emerald-400" />
-                    {t('Bank Account for Customer Payments', 'የደንበኞች ክፍያ የባንክ መለያ')}
-                  </h4>
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    {t('Customers see these details when they choose bank transfer and pay, then upload the receipt.', 'ደንበኞች የባንክ ዝውውር ሲመርጡ እነዚህን መረጃዎች በመክፈል አላቸው ደረሰኝ ይጫናቸዋል።')}
-                  </p>
-                </div>
-                {merchant?.bank_name && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
-                    {t('ACTIVE', 'ንቁ')}
-                  </span>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono mb-1.5">
-                    {t('Bank Name', 'የባንክ ስም')}
-                  </label>
-                  <input
-                    type="text"
-                    value={bankForm.bankName}
-                    onChange={e => setBankForm(prev => ({ ...prev, bankName: e.target.value }))}
-                    placeholder={t('e.g. Commercial Bank of Ethiopia', 'ምሳሌ CBE')}
-                    maxLength={100}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono mb-1.5">
-                    {t('Account Holder', 'የሂሳብ ተባላሪ')}
-                  </label>
-                  <input
-                    type="text"
-                    value={bankForm.accountName}
-                    onChange={e => setBankForm(prev => ({ ...prev, accountName: e.target.value }))}
-                    placeholder={t('Store / company name', 'የድርጅት ስም')}
-                    maxLength={200}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono mb-1.5">
-                    {t('Account Number', 'የሂሳብ ቁጥር')}
-                  </label>
-                  <input
-                    type="text"
-                    value={bankForm.accountNumber}
-                    onChange={e => setBankForm(prev => ({ ...prev, accountNumber: e.target.value }))}
-                    placeholder={t('e.g. 1000 2345 6789 0123', 'ምሳሌ 1000 2345 6789 0123')}
-                    maxLength={50}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between gap-3">
-                <p className={`text-[11px] font-semibold ${bankMessage?.type === 'error' ? 'text-red-400' : 'text-emerald-400'}`}>
-                  {bankMessage?.text || (!bankForm.bankName && !bankForm.accountName && !bankForm.accountNumber
-                    ? t('Fill all three fields, or clear all three to hide bank details from customers.', 'ሦስቱንም መስኮች ይሞሉ፣ ወይም ሦስቱንም አጽዳ አላስቀምጡ።')
-                    : '')}
-                </p>
-                <button
-                  type="submit"
-                  disabled={bankSaving}
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all disabled:opacity-50 shrink-0"
-                >
-                  {bankSaving ? t('Saving...', 'በማስቀመጥ ላይ...') : t('Save Bank Details', 'ባንክ መረጃ አስቀምጥ')}
-                </button>
-              </div>
-            </form>
 
             {/* Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -2743,6 +2690,102 @@ export const MerchantDashboard = () => {
                 {t('Close', 'ዝጋ')}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bank Settings Modal */}
+      {bankModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => setBankModalOpen(false)}
+          />
+          <div className="relative w-full max-w-2xl glass-panel p-5 sm:p-6 rounded-2xl border border-slate-800 shadow-2xl animate-fade-in">
+            <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-800">
+              <div>
+                <h4 className="text-sm font-extrabold text-slate-100 uppercase tracking-wider font-mono flex items-center gap-2">
+                  <Landmark className="w-4 h-4 text-emerald-400" />
+                  {t('Bank Account for Customer Payments', 'የደንበኞች ክፍያ የባንክ መለያ')}
+                </h4>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  {t('Customers see these details when they choose bank transfer and pay, then upload the receipt.', 'ደንበኞች የባንክ ዝውውር ሲመርጡ እነዚህን መረጃዎች በመክፈል አላቸው ደረሰኝ ይጫናቸዋል።')}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBankModalOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form noValidate onSubmit={saveBankAccount} className="pt-4 space-y-4">
+              {merchant?.bank_name && (
+                <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  {t('ACTIVE', 'ንቁ')}
+                </span>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono mb-1.5">
+                    {t('Bank Name', 'የባንክ ስም')}
+                  </label>
+                  <input
+                    type="text"
+                    value={bankForm.bankName}
+                    onChange={e => setBankForm(prev => ({ ...prev, bankName: e.target.value }))}
+                    placeholder={t('e.g. Commercial Bank of Ethiopia', 'ምሳሌ CBE')}
+                    maxLength={100}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono mb-1.5">
+                    {t('Account Holder', 'የሂሳብ ተባላሪ')}
+                  </label>
+                  <input
+                    type="text"
+                    value={bankForm.accountName}
+                    onChange={e => setBankForm(prev => ({ ...prev, accountName: e.target.value }))}
+                    placeholder={t('Store / company name', 'የድርጅት ስም')}
+                    maxLength={200}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono mb-1.5">
+                    {t('Account Number', 'የሂሳብ ቁጥር')}
+                  </label>
+                  <input
+                    type="text"
+                    value={bankForm.accountNumber}
+                    onChange={e => setBankForm(prev => ({ ...prev, accountNumber: e.target.value }))}
+                    placeholder={t('e.g. 1000 2345 6789 0123', 'ምሳሌ 1000 2345 6789 0123')}
+                    maxLength={50}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-3">
+                <p className={`text-[11px] font-semibold ${bankMessage?.type === 'error' ? 'text-red-400' : 'text-emerald-400'}`}>
+                  {bankMessage?.text || (!bankForm.bankName && !bankForm.accountName && !bankForm.accountNumber
+                    ? t('Fill all three fields, or clear all three to hide bank details from customers.', 'ሦስቱንም መስኮች ይሞሉ፣ ወይም ሦስቱንም አጽዳ አላስቀምጡ።')
+                    : '')}
+                </p>
+                <button
+                  type="submit"
+                  disabled={bankSaving}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all disabled:opacity-50 shrink-0"
+                >
+                  {bankSaving ? t('Saving...', 'በማስቀመጥ ላይ...') : t('Save Bank Details', 'ባንክ መረጃ አስቀምጥ')}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
