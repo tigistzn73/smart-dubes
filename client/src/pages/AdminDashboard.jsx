@@ -15,8 +15,6 @@ import {
   Lock,
   Layers,
   Send,
-  PanelLeftClose,
-  PanelLeftOpen,
   LayoutDashboard,
   Menu,
   Maximize2,
@@ -330,7 +328,7 @@ export const AdminDashboard = () => {
                   className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all cursor-pointer"
                   title={sidebarCollapsed ? 'Open sidebar' : 'Close sidebar'}
                 >
-                  {sidebarCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+                  <Menu className="w-4 h-4" />
                 </button>
               </div>
             </div>
