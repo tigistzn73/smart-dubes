@@ -437,7 +437,9 @@ export const CustomerPortal = () => {
       });
     }
   });
-  const unscheduledPendingTransactions = pendingTransactions.filter(tx => !scheduledTransactionIds.has(Number(tx.id)));
+  const unscheduledPendingTransactions = pendingTransactions.filter(tx =>
+    !scheduledTransactionIds.has(Number(tx.id)) && !pendingReviewTxIds.has(Number(tx.id))
+  );
 
   // The real Birr actually owed on a receipt. The dashboard reports
   // remaining_amount (total minus completed repayments), so that is read first
