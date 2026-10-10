@@ -411,6 +411,15 @@ export const CustomerPortal = () => {
   });
   const unscheduledPendingTransactions = pendingTransactions.filter(tx => !scheduledTransactionIds.has(Number(tx.id)));
 
+  // The real Birr actually owed on a receipt. The dashboard reports
+  // remaining_amount (total minus completed repayments), so that is read first
+  // and total_amount is only a fallback for rows where it is missing.
+  const realDubeAmount = (tx) => {
+    const rem = Number(tx?.remaining_amount);
+    if (!Number.isNaN(rem) && rem > 0) return rem;
+    return Number(tx?.total_amount) || 0;
+  };
+
   // Receipts still awaiting a schedule/payment, and the subset the current store
   // filter shows. Scheduled receipts are excluded so the itemized panel only ever
   // lists receipts the customer still needs to schedule or pay directly.
@@ -1311,7 +1320,7 @@ export const CustomerPortal = () => {
                             <span className="text-[11px] text-amber-400 font-mono">
                               {filteredPendingTransactions
                                 .filter(tx => selectedTxIds.includes(tx.id))
-                                .reduce((sum, tx) => sum + (Number(tx.total_amount) || 0), 0)
+                                .reduce((sum, tx) => sum + realDubeAmount(tx), 0)
                                 .toFixed(2)} ETB
                             </span>
                           )}
@@ -1372,7 +1381,6 @@ export const CustomerPortal = () => {
                             (tx.store_name && s.store_name && s.store_name.toLowerCase() === tx.store_name.toLowerCase())
                           );
                           const isScheduled = matchingSchedule && matchingSchedule.installments?.some(i => i.status !== 'PAID');
-                          const nextInst = isScheduled ? matchingSchedule.installments.find(i => i.status !== 'PAID') : null;
                           const isSelected = selectedTxIds.includes(tx.id);
 
                           return (
@@ -1405,6 +1413,11 @@ export const CustomerPortal = () => {
                                   >
                                     {tx.status === 'SETTLED' ? t('SETTLED', 'የተከፈለ') : tx.status === 'OVERDUE' ? t('OVERDUE', 'ቀን ያለፈበት') : t('PENDING', 'ያልተከፈለ')}
                                   </span>
+                                  {isScheduled && (
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-sky-500/20 text-sky-400 border border-sky-500/30">
+                                      {t('ON SCHEDULE', 'በጊዜ ሰሌዳ ላይ')}
+                                    </span>
+                                  )}
                                 </div>
 
                                 {/* Line items preview */}
@@ -1421,10 +1434,10 @@ export const CustomerPortal = () => {
                               <div className="flex items-center gap-4 self-end md:self-auto">
                                 <div className="text-right">
                                   <p className="text-xs text-slate-500">
-                                    {t('Due Date:', 'የመክፈያ ቀን፦')} {nextInst ? nextInst.dueDate : (tx.due_date ? String(tx.due_date).split('T')[0] : 'N/A')}
+                                    {t('Due Date:', 'የመክፈያ ቀን፦')} {tx.due_date ? String(tx.due_date).split('T')[0] : 'N/A'}
                                   </p>
                                   <p className="font-extrabold text-amber-400 text-base">
-                                    {nextInst ? `${nextInst.amount.toFixed(2)} ETB` : `${tx.total_amount.toFixed(2)} ETB`}
+                                    {realDubeAmount(tx).toFixed(2)} ETB
                                   </p>
                                 </div>
 
@@ -1440,25 +1453,23 @@ export const CustomerPortal = () => {
                                       className="px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold shadow-md shadow-sky-600/20 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 whitespace-nowrap"
                                     >
                                       <Calendar className="w-3.5 h-3.5" />
-                                      <span>{t('Choose Schedule', 'የጊዜ ሰሌዳ ምረጥ')}</span>
+                                      <span>{isScheduled ? t('Modify Schedule', 'የጊዜ ሰሌዳ ቀይር') : t('Choose Schedule', 'የጊዜ ሰሌዳ ምረጥ')}</span>
                                     </button>
 
-                                    {/* Pay current installment when a plan is active, otherwise the full debt */}
-                                    {nextInst ? (
+                                    {/* Always pay the full outstanding Dube from the itemized
+                                        panel. Installment amounts belong on the Active Schedule
+                                        cards above, never here — showing 250 for a 1000 ETB
+                                        receipt is the exact bug a scheduled row used to cause. */}
+                                    {isScheduled ? (
+                                      <span className="px-3 py-2 rounded-xl bg-sky-500/10 text-sky-300 border border-sky-500/30 text-xs font-bold">
+                                        {t('Pay via schedule above', 'ከላይ ባለው የጊዜ ሰሌዳ ይክፈሉ')}
+                                      </span>
+                                    ) : (
                                       <button
                                         onClick={() => setSelectedTxForPayment({
                                           ...tx,
-                                          total_amount: nextInst.amount,
-                                          installmentNo: nextInst.installmentNo
+                                          total_amount: realDubeAmount(tx)
                                         })}
-                                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 whitespace-nowrap"
-                                      >
-                                        <CreditCard className="w-3.5 h-3.5" />
-                                        <span>{t('Pay Inst', 'ክፍልፋይ ክፈል')} #{nextInst.installmentNo}</span>
-                                      </button>
-                                    ) : (
-                                      <button
-                                        onClick={() => setSelectedTxForPayment(tx)}
                                         className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 whitespace-nowrap"
                                       >
                                         <CreditCard className="w-3.5 h-3.5" />
