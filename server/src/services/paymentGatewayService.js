@@ -286,7 +286,9 @@ async function approveUploadedReceipt({ repaymentId, action, merchantUserId, act
 
       // 1b. Once an uploaded installment receipt is approved, flip that exact
       // installment on the customer's ACTIVE schedule to PAID. It stayed at
-      // SCHEDULED (shown as Pending Review) until this moment.
+      // SCHEDULED (shown as Pending Review) until this moment. When every
+      // installment of the plan is now PAID, the schedule is closed immediately
+      // (COMPLETED) so the Active Schedule card disappears and the Dube is done.
       if (repayment.installment_no) {
         const plan = await client.query(
           `SELECT id, installments_json FROM customer_schedules
@@ -298,9 +300,10 @@ async function approveUploadedReceipt({ repaymentId, action, merchantUserId, act
           const approvedInsts = planInsts.map(inst =>
             inst.installmentNo === repayment.installment_no ? { ...inst, status: 'PAID' } : inst
           );
+          const planNowPaid = approvedInsts.length > 0 && approvedInsts.every(i => i.status === 'PAID');
           await client.query(
-            'UPDATE customer_schedules SET installments_json = $1 WHERE id = $2',
-            [JSON.stringify(approvedInsts), plan.rows[0].id]
+            'UPDATE customer_schedules SET installments_json = $1, status = $2 WHERE id = $3',
+            [JSON.stringify(approvedInsts), planNowPaid ? 'COMPLETED' : 'ACTIVE', plan.rows[0].id]
           );
         }
       }
