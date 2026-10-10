@@ -393,21 +393,17 @@ export const CustomerPortal = () => {
   const repayments = data?.repayments || [];
   const profiles = data?.profiles || [];
 
-  // Receipts standing on an ACTIVE repayment schedule are paid through that
-  // plan's installments, so they are hidden from the itemized pending list and
-  // only shown as Active Schedule cards above. A per-receipt plan (transaction_id
-  // set) covers that one receipt; a store-level plan (transaction_id null) covers
-  // the whole outstanding balance of that customer profile.
+  // Receipts standing on a DEDICATED ACTIVE repayment schedule (a plan tied to
+  // that exact receipt via customer_schedules.transaction_id) are paid through
+  // that plan's installments, so they are hidden from the itemized pending list
+  // and only shown as Active Schedule cards above. Store-level/aggregate plans
+  // (transaction_id null) do NOT blank out other receipts at that store: any
+  // receipt without its own plan must stay visible so it can be scheduled or
+  // paid directly.
   const allActiveSchedules = data?.activeSchedules || (data?.activeSchedule ? [data.activeSchedule] : []);
   const scheduledTransactionIds = new Set();
   allActiveSchedules.forEach(s => {
-    if (s.transaction_id) {
-      scheduledTransactionIds.add(Number(s.transaction_id));
-    } else if (s.customer_id) {
-      pendingTransactions.forEach(tx => {
-        if (Number(tx.customer_id) === Number(s.customer_id)) scheduledTransactionIds.add(Number(tx.id));
-      });
-    }
+    if (s.transaction_id) scheduledTransactionIds.add(Number(s.transaction_id));
   });
   const unscheduledPendingTransactions = pendingTransactions.filter(tx => !scheduledTransactionIds.has(Number(tx.id)));
 
@@ -1370,17 +1366,15 @@ export const CustomerPortal = () => {
                       <div className="space-y-3">
                         {displayedPendingTransactions.map(tx => {
                           const allActiveSchedules = data?.activeSchedules || (data?.activeSchedule ? [data.activeSchedule] : []);
-                          // Prefer the plan tied to THIS receipt, so concurrent plans
-                          // for other receipts at the same store are not confused
+                          // Only a plan dedicated to THIS receipt counts as
+                          // scheduled here. Store-level/aggregate plans do not
+                          // mark every receipt at that store; those receipts stay
+                          // visible as normal payable rows unless they have their
+                          // own plan.
                           const linkedSchedule = allActiveSchedules.find(s =>
                             s.transaction_id && Number(s.transaction_id) === Number(tx.id)
                           );
-                          const matchingSchedule = linkedSchedule || allActiveSchedules.find(s =>
-                            (tx.merchant_id && String(s.merchant_id) === String(tx.merchant_id)) ||
-                            (tx.customer_id && s.customer_id === tx.customer_id) ||
-                            (tx.store_name && s.store_name && s.store_name.toLowerCase() === tx.store_name.toLowerCase())
-                          );
-                          const isScheduled = matchingSchedule && matchingSchedule.installments?.some(i => i.status !== 'PAID');
+                          const isScheduled = linkedSchedule && linkedSchedule.installments?.some(i => i.status !== 'PAID');
                           const isSelected = selectedTxIds.includes(tx.id);
 
                           return (
