@@ -410,18 +410,26 @@ export const CustomerPortal = () => {
       .filter(r => r.status === 'PENDING' && r.transaction_id)
       .map(r => Number(r.transaction_id))
   );
-  // Receipts standing on a DEDICATED ACTIVE repayment schedule (a plan tied to
-  // that exact receipt via customer_schedules.transaction_id) are paid through
-  // that plan's installments, so they are hidden from the itemized pending list
-  // and only shown as Active Schedule cards above — unless a payment is currently
-  // PENDING REVIEW, in which case the receipt is kept visible. Store-level/aggregate
-  // plans (transaction_id null) do NOT blank out other receipts at that store: any
-  // receipt without its own plan must stay visible so it can be scheduled or paid
-  // directly.
+  // Receipts covered by an ACTIVE repayment schedule are paid through that plan,
+  // so they are hidden from the itemized pending list and only shown on the Active
+  // Repayment Schedule cards above (with their PAID/SCHEDULED installment status) —
+  // unless a payment is currently PENDING REVIEW, in which case the receipt is kept
+  // visible as a red row until the merchant checks and approves (or rejects) it.
+  // A per-receipt plan (transaction_id set) covers that exact receipt; a
+  // store-level/aggregate plan (transaction_id null) covers every pending receipt
+  // of that customer profile at that store.
   const scheduledTransactionIds = new Set();
   allActiveSchedules.forEach(s => {
-    if (s.transaction_id && !pendingReviewTxIds.has(Number(s.transaction_id))) {
-      scheduledTransactionIds.add(Number(s.transaction_id));
+    if (s.transaction_id) {
+      if (!pendingReviewTxIds.has(Number(s.transaction_id))) {
+        scheduledTransactionIds.add(Number(s.transaction_id));
+      }
+    } else if (s.customer_id) {
+      pendingTransactions.forEach(tx => {
+        if (Number(tx.customer_id) === Number(s.customer_id) && !pendingReviewTxIds.has(Number(tx.id))) {
+          scheduledTransactionIds.add(Number(tx.id));
+        }
+      });
     }
   });
   const unscheduledPendingTransactions = pendingTransactions.filter(tx => !scheduledTransactionIds.has(Number(tx.id)));
