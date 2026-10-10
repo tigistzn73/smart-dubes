@@ -1116,6 +1116,10 @@ export const CustomerPortal = () => {
                           const paidCount = matchingSchedule.installments.filter(i => i.status === 'PAID').length;
                           const totalCount = matchingSchedule.installments.length;
                           const nextUnpaidInst = matchingSchedule.installments.find(i => i.status !== 'PAID');
+                          // Paid installments are hidden from the card once the merchant
+                          // approves the uploaded receipt; only the installments that
+                          // still need action (SCHEDULED / Pending Review) stay listed.
+                          const payableInstallments = matchingSchedule.installments.filter(i => i.status !== 'PAID');
                           // The receipt this plan belongs to (null for legacy store-wide plans)
                           const linkedTx = matchingSchedule.transaction_id
                             ? transactions.find(t => Number(t.id) === Number(matchingSchedule.transaction_id))
@@ -1173,7 +1177,12 @@ export const CustomerPortal = () => {
                           </div>
 
                           <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                            {matchingSchedule.installments.map(inst => {
+                            {payableInstallments.length === 0 ? (
+                              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-700 text-center">
+                                {t('All installments paid — schedule complete', 'ሁሉም ክፍልፋዮች ተከፍለዋል — የጊዜ ሰሌዳ ተጠናቋል')}
+                              </div>
+                            ) : (
+                            payableInstallments.map(inst => {
                               const isPaid = inst.status === 'PAID';
                               const isNextToPay = nextUnpaidInst && nextUnpaidInst.installmentNo === inst.installmentNo;
                               // Uploaded receipt not yet approved/rejected by the merchant:
@@ -1249,7 +1258,8 @@ export const CustomerPortal = () => {
                                   </div>
                                 </div>
                               );
-                            })}
+                            })
+                            )}
                           </div>
                         </div>
 
