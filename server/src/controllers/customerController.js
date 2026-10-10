@@ -1,6 +1,6 @@
 const db = require('../config/database');
 const { processRepayment, processMultiMerchantRepayment } = require('../services/paymentGatewayService');
-const { getCustomerNotices } = require('../services/escalationService');
+const { getCustomerNotices, acknowledgeCourtLetter } = require('../services/escalationService');
 
 // pg hands back DATE columns as a Date at local midnight, so calling toISOString()
 // would roll the calendar day back for users east of UTC. Read the local parts instead.
@@ -154,6 +154,36 @@ async function getCustomerDashboard(req, res) {
   } catch (err) {
     console.error('Customer Dashboard Error:', err);
     res.status(500).json({ error: err.message });
+  }
+}
+
+// Customer formally accepts the court letter WITHOUT paying. The debt stays
+// outstanding; this only records that the notice was seen and acknowledged, so
+// the merchant learns the letter reached the customer.
+async function acceptCourtLetter(req, res) {
+  const { caseId } = req.body;
+
+  try {
+    if (!caseId || !Number.isInteger(parseInt(caseId, 10))) {
+      return res.status(400).json({ error: 'Invalid court letter case ID.' });
+    }
+
+    const userPhone = req.user.phone;
+    const profiles = await db.all(
+      `SELECT id FROM customer_profiles WHERE phone = $1 OR user_id = $2`,
+      [userPhone, req.user.id]
+    );
+    const profileIds = profiles.map(p => p.id);
+
+    if (profileIds.length === 0) {
+      return res.status(403).json({ error: 'No customer profile found for this account.' });
+    }
+
+    const result = await acknowledgeCourtLetter(parseInt(caseId, 10), profileIds);
+    res.json(result);
+  } catch (err) {
+    console.error('Customer accept court letter error:', err.message);
+    res.status(400).json({ error: err.message });
   }
 }
 
@@ -638,5 +668,6 @@ module.exports = {
   getCustomerDashboard,
   initiateRepayment,
   generateInstallmentSchedule,
-  saveCustomerSchedule
+  saveCustomerSchedule,
+  acceptCourtLetter
 };

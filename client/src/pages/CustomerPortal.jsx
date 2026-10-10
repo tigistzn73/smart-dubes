@@ -90,6 +90,10 @@ export const CustomerPortal = () => {
   const [letterView, setLetterView] = useState('image');
   const [letterImageFailed, setLetterImageFailed] = useState(false);
   const [letterImageLoading, setLetterImageLoading] = useState(false);
+  // Customer formally accepting the letter without paying, e.g. "I have read
+  // the notice but cannot repay right now".
+  const [acknowledgingLetterId, setAcknowledgingLetterId] = useState(null);
+  const [ackLetterError, setAckLetterError] = useState('');
 
   const openLetter = (notice) => {
     setOpenCourtLetter(notice);
@@ -146,6 +150,41 @@ export const CustomerPortal = () => {
       setDashboardError(lastErr);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Accept the court letter without paying. Accepting only records that the
+  // notice was read; the debt stays outstanding, so the letter remains active.
+  const handleAcknowledgeCourtLetter = async (notice) => {
+    if (!notice || acknowledgingLetterId) return;
+    setAcknowledgingLetterId(notice.id);
+    setAckLetterError('');
+    try {
+      const res = await fetch('/api/customer/court-letter/acknowledge', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ caseId: notice.id })
+      });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(getErrorMessage(payload, 'Failed to accept the court letter.'));
+      // Reflect the acknowledgement locally without a full refetch, so the open
+      // reader does not flash away behind a loading spinner.
+      setData(prev => ({
+        ...prev,
+        notices: (prev?.notices || []).map(n => n.id === notice.id
+          ? { ...n, is_acknowledged: true, acknowledged_at: payload.acknowledged_at, status: 'RESPONDED' }
+          : n)
+      }));
+      setOpenCourtLetter(prev => prev
+        ? { ...prev, is_acknowledged: true, acknowledged_at: payload.acknowledged_at, status: 'RESPONDED' }
+        : prev);
+    } catch (err) {
+      setAckLetterError(getErrorMessage(err));
+    } finally {
+      setAcknowledgingLetterId(null);
     }
   };
 
@@ -630,6 +669,15 @@ export const CustomerPortal = () => {
                             {t(
                               'This letter is already on your page and counts from today. The shop has not yet sent it to you by SMS.',
                               'ይህ ደብዳቤ በዚህ ጊዜ በገጹ ላይ ተቀምጧል። ድሽንግ ጎዳናው እስካሁን በኤስኤምኤስ አልላከውም።'
+                            )}
+                          </p>
+                        )}
+                        {n.is_acknowledged && (
+                          <p className="text-[11px] text-sky-200/80 flex items-center gap-1.5">
+                            <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                            {t(
+                              `You accepted this letter on ${new Date(n.acknowledged_at || n.court_letter_sent_at).toLocaleDateString()}. Accepting does not clear the debt — it only confirms you received the notice.`,
+                              `ይህን ደብዳቤ በ${new Date(n.acknowledged_at || n.court_letter_sent_at).toLocaleDateString()} ተቀብለዋል። መቀበል ዕዳውን አያስቀርም — ደብዳቤው መድረሱን የሚያረጋግጥ እውቅና ብቻ ነው።`
                             )}
                           </p>
                         )}
@@ -1258,9 +1306,26 @@ export const CustomerPortal = () => {
                     )}
 
                     {displayedPendingTransactions.length === 0 ? (
-                      <div className="text-center py-8 text-slate-500 text-xs">
-                        {t('No pending credit ledger items found.', 'ምንም ያልተከፈለ የዱቤ ቀሪ ሂሳብ አልተገኘም።')}
-                      </div>
+                      pendingTransactions.length > 0 && selectedMerchantFilter !== 'ALL' ? (
+                        <div className="text-center py-8 space-y-2">
+                          <p className="text-slate-500 text-xs">
+                            {t('No pending receipts under this store filter.', 'በይሄ የስሟት ማጣሪያ ምንም ያልተከፈለ ደረሰኞ አልተገኘም።')}
+                          </p>
+                          <p className="text-slate-400 text-xs font-mono">
+                            {t(`${pendingTransactions.length} receipt(s) at other stores are hidden.`, `${pendingTransactions.length} በሌሎች ሱቆች ያሉ ደረሰኞች ተደብቀዋል።`)}
+                          </p>
+                          <button
+                            onClick={() => setSelectedMerchantFilter('ALL')}
+                            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-bold transition-colors cursor-pointer"
+                          >
+                            {t('Show all receipts', 'ሁሉንም ደረሰኞች አሳይ')}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-slate-500 text-xs">
+                          {t('No pending credit ledger items found.', 'ምንም ያልተከፈለ የዱቤ ቀሪ ሂሳብ አልተገኘም።')}
+                        </div>
+                      )
                     ) : (
                       <div className="space-y-3">
                         {displayedPendingTransactions.map(tx => {
@@ -1744,6 +1809,18 @@ export const CustomerPortal = () => {
                 </div>
               )}
 
+              {!openCourtLetter.is_settled && openCourtLetter.is_acknowledged && (
+                <div className="mb-4 flex items-center gap-2 rounded-xl border border-sky-500/30 bg-sky-500/10 px-3.5 py-2.5">
+                  <ShieldCheck className="w-4 h-4 text-sky-400 shrink-0" />
+                  <p className="text-xs text-sky-300 font-semibold">
+                    {t(
+                      `You accepted this court letter on ${new Date(openCourtLetter.acknowledged_at || openCourtLetter.court_letter_sent_at).toLocaleDateString()}. Accepting does not clear the debt — it only confirms you received the notice.`,
+                      `ይህን የዳኝነት ደብዳቤ በ${new Date(openCourtLetter.acknowledged_at || openCourtLetter.court_letter_sent_at).toLocaleDateString()} ተቀብለዋል። መቀበል ዕዳውን አያስቀርም — ደብዳቤው መድረሱን የሚያረጋግጥ እውቅና ብቻ ነው።`
+                    )}
+                  </p>
+                </div>
+              )}
+
               {/* View switch. Only shown when the image exists; otherwise the text
                   below is the whole notice. */}
               {openCourtLetter.image_available && !letterImageFailed && (
@@ -1833,6 +1910,12 @@ export const CustomerPortal = () => {
                 </span>
               </div>
 
+              {ackLetterError && (
+                <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11px] font-semibold text-red-300">
+                  {ackLetterError}
+                </div>
+              )}
+
               {/* History of letters the customer has already dealt with */}
               {settledCourtLetters.length > 0 && (
                 <div className="mt-5 pt-4 border-t border-slate-800 space-y-2">
@@ -1882,6 +1965,26 @@ export const CustomerPortal = () => {
                   >
                     {t('Pay This Debt Now', 'አሁኑ ይክፈሉ')}
                   </button>
+                  {!openCourtLetter.is_acknowledged && (
+                    <button
+                      onClick={() => handleAcknowledgeCourtLetter(openCourtLetter)}
+                      disabled={acknowledgingLetterId === openCourtLetter.id}
+                      className="flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/40 text-xs font-bold transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={t(
+                        'Accepts this letter as received. The debt is still not paid and remains payable.',
+                        'ደብዳቤው መድረሱን ብቻ ያረጋግጣል። ዕዳው አሁንም ይከፈላል።'
+                      )}
+                    >
+                      {acknowledgingLetterId === openCourtLetter.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                      )}
+                      <span>{acknowledgingLetterId === openCourtLetter.id
+                        ? t('Accepting...', 'በመቀበል ላይ...')
+                        : t('Accept Court Letter', 'ደብዳቤውን ተቀበል')}</span>
+                    </button>
+                  )}
                   <button
                     onClick={() => setOpenCourtLetter(null)}
                     className="py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-colors cursor-pointer"

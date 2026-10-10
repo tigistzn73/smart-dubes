@@ -2025,6 +2025,11 @@ export const MerchantDashboard = () => {
                         {ec.status === 'RESOLVED' ? t('RESOLVED', 'ተብቷል') : ec.status === 'CLOSED' ? t('CLOSED', 'ተዘግቷል') : ec.escalation_type === 'COURT_LETTER' ? t('COURT LETTER', 'የፍርድ ቤት ደብዳቤ') : t('WARNING', 'ማስጠንቀቂያ')}
                       </span>
                       <span className="text-xs font-bold text-amber-400">{parseFloat(ec.amount).toFixed(2)} ETB</span>
+                      {ec.customer_acknowledged && (
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-sky-500/20 text-sky-400 border border-sky-500/30">
+                          {t('Customer Accepted', 'ደንበኛ ተቀብሏል')}
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -2044,6 +2049,14 @@ export const MerchantDashboard = () => {
                     <div className="bg-slate-950 p-2 rounded-lg border border-slate-800">
                       <span className="text-slate-500 text-[10px] block">{t('Court Letter Notified', 'የፍርድ ቤት ደብዳቤ ተልኳል')}</span>
                       <span className="text-slate-300 font-bold">{ec.court_letter_sent_at ? new Date(ec.court_letter_sent_at).toLocaleDateString() : 'N/A'}</span>
+                    </div>
+                    <div className="bg-slate-950 p-2 rounded-lg border border-slate-800">
+                      <span className="text-slate-500 text-[10px] block">{t('Customer Accepted', 'ደንበኛ ተቀብሏል')}</span>
+                      <span className={`font-bold ${ec.customer_acknowledged ? 'text-sky-400' : 'text-amber-400'}`}>
+                        {ec.customer_acknowledged
+                          ? new Date(ec.customer_acknowledged_at).toLocaleDateString()
+                          : t('Not yet', 'እስካሁን አልተቀበለም')}
+                      </span>
                     </div>
                     <div className="bg-slate-950 p-2 rounded-lg border border-slate-800">
                       <span className="text-slate-500 text-[10px] block">{t('Status', 'ሁኔታ')}</span>

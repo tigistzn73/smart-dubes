@@ -664,7 +664,7 @@ async function getCustomerNotices(profileIds) {
            ec.warning_period_days, ec.warning_sent_at,
            ec.court_letter_ref, ec.court_letter_body, ec.court_letter_doc,
            ec.court_letter_issued_at, ec.court_letter_sent_at,
-           ec.resolved_at, ec.created_at,
+           ec.customer_acknowledged_at, ec.resolved_at, ec.created_at,
            m.store_name, m.address as store_address, m.business_license_no,
            ct.transaction_ref
     FROM escalation_cases ec
@@ -689,6 +689,10 @@ async function getCustomerNotices(profileIds) {
     due_date: toDateOnly(row.due_date),
     grace_days: row.warning_period_days || WARNING_PERIOD_DAYS,
     is_settled: row.status === 'RESOLVED',
+    // Whether the customer has formally accepted the letter. Acceptance records
+    // that the notice was seen; it does not settle the debt, so is_settled is
+    // still false afterwards and the case stays active.
+    is_acknowledged: !!row.customer_acknowledged_at,
     // The grace period runs from the day the letter reached the page, not from
     // the day the merchant got round to sending the notice.
     days_since_issued: daysSince(row.court_letter_issued_at),
@@ -864,7 +868,10 @@ async function getEscalationCases(merchantId) {
       // customer's page, and the customer has been told about it by SMS.
       court_letter_issued: !!row.court_letter_issued_at,
       court_letter_notified: !!row.court_letter_sent_at,
-      court_letter_can_be_sent: daysUntilCourtLetter === 0
+      court_letter_can_be_sent: daysUntilCourtLetter === 0,
+      // Whether the customer has formally accepted the letter without paying.
+      // The debt remains, but the merchant now knows the notice was received.
+      customer_acknowledged: !!row.customer_acknowledged_at
     };
   });
 }
@@ -877,6 +884,85 @@ async function getEscalationCaseById(caseId, merchantId) {
     LEFT JOIN credit_transactions ct ON ec.transaction_id = ct.id
     WHERE ec.id = $1 AND ec.merchant_id = $2
   `, [caseId, merchantId]);
+}
+
+/**
+ * Record the customer's formal acceptance of the court letter.
+ *
+ * Accepting is not paying: the customer says they have seen the notice while
+ * the debt stays outstanding, so the case must remain active. The acceptance is
+ * deliberately one-way and idempotent — a customer can acknowledge as many times
+ * as they like, only the first timestamp is kept, and the act is never undone,
+ * because a legal notice cannot be un-accepted once on record.
+ */
+async function acknowledgeCourtLetter(caseId, customerProfileIds) {
+  const ids = (Array.isArray(customerProfileIds) ? customerProfileIds : [customerProfileIds]).filter(Boolean);
+  if (ids.length === 0) {
+    throw new Error('Customer profile is required.');
+  }
+
+  const escalationCase = await db.get(
+    `SELECT ec.*, cp.full_name as customer_name, m.store_name
+     FROM escalation_cases ec
+     JOIN customer_profiles cp ON ec.customer_id = cp.id
+     JOIN merchants m ON ec.merchant_id = m.id
+     WHERE ec.id = $1`,
+    [caseId]
+  );
+
+  if (!escalationCase) {
+    throw new Error('Court letter case not found.');
+  }
+
+  if (!ids.includes(escalationCase.customer_id)) {
+    throw new Error('This court letter does not belong to your account.');
+  }
+
+  if (escalationCase.escalation_type !== 'COURT_LETTER' || !escalationCase.court_letter_issued_at) {
+    throw new Error('No court letter has been issued for this case.');
+  }
+
+  if (['RESOLVED', 'CLOSED'].includes(escalationCase.status)) {
+    throw new Error('This case is already settled or closed.');
+  }
+
+  const result = await db.run(
+    `UPDATE escalation_cases
+     SET status = 'RESPONDED',
+         customer_acknowledged_at = COALESCE(customer_acknowledged_at, NOW()),
+         updated_at = NOW(),
+         notes = CASE
+           WHEN COALESCE(notes, '') <> '' THEN notes || ' — '
+           ELSE ''
+         END || 'Customer acknowledged receipt of the court letter.'
+     WHERE id = $1
+       AND customer_id = ANY($2::int[])`,
+    [caseId, ids]
+  );
+
+  if (result.rowCount === 0) {
+    throw new Error('Could not acknowledge the court letter.');
+  }
+
+  logAudit({
+    userId: null,
+    actorName: escalationCase.customer_name,
+    action: 'COURT_LETTER_ACKNOWLEDGED',
+    resource: `Escalation Case #${caseId}`,
+    details: {
+      merchantId: escalationCase.merchant_id,
+      storeName: escalationCase.store_name,
+      amount: escalationCase.amount,
+      letterRef: escalationCase.court_letter_ref
+    }
+  });
+
+  return {
+    message: 'Court letter accepted. The debt remains outstanding.',
+    caseId,
+    letterRef: escalationCase.court_letter_ref,
+    acknowledged_at: new Date().toISOString()
+  };
 }
 
 async function resolveEscalationCase(caseId, merchantId, notes) {
@@ -922,6 +1008,7 @@ module.exports = {
   buildCourtLetterDocument,
   getEscalationCases,
   getEscalationCaseById,
+  acknowledgeCourtLetter,
   resolveEscalationCase,
   closeEscalationCase,
   WARNING_PERIOD_DAYS

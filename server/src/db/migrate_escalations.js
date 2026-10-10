@@ -31,6 +31,7 @@ async function migrate() {
       court_letter_doc JSONB,
       court_letter_issued_at TIMESTAMPTZ,
       court_letter_sent_at TIMESTAMPTZ,
+      customer_acknowledged_at TIMESTAMPTZ,
       resolved_at TIMESTAMPTZ,
       notes TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -46,7 +47,8 @@ async function migrate() {
     ['court_letter_ref', 'VARCHAR(60)'],
     ['court_letter_body', 'TEXT'],
     ['court_letter_doc', 'JSONB'],
-    ['court_letter_issued_at', 'TIMESTAMPTZ']
+    ['court_letter_issued_at', 'TIMESTAMPTZ'],
+    ['customer_acknowledged_at', 'TIMESTAMPTZ']
   ];
 
   for (const [column, definition] of addedColumns) {

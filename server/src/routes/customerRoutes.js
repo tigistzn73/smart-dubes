@@ -4,7 +4,8 @@ const {
   getCustomerDashboard,
   initiateRepayment,
   generateInstallmentSchedule,
-  saveCustomerSchedule
+  saveCustomerSchedule,
+  acceptCourtLetter
 } = require('../controllers/customerController');
 const { authenticateToken, authorizeRoles } = require('../middleware/auth');
 const { validateResult } = require('../middleware/validate');
@@ -39,5 +40,14 @@ const scheduleValidators = [
 
 router.post('/schedule', scheduleValidators, generateInstallmentSchedule);
 router.post('/schedule/apply', scheduleValidators, saveCustomerSchedule);
+
+router.post(
+  '/court-letter/acknowledge',
+  [
+    body('caseId').isInt({ min: 1 }).withMessage('Court letter case ID must be a positive integer'),
+    validateResult
+  ],
+  acceptCourtLetter
+);
 
 module.exports = router;

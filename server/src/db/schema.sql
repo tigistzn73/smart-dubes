@@ -191,6 +191,10 @@ CREATE TABLE IF NOT EXISTS escalation_cases (
     -- When the court letter was notified to the customer by SMS/MMS, which the
     -- merchant does only after the warning grace period has run out.
     court_letter_sent_at TIMESTAMPTZ,
+    -- When the customer formally accepted the court letter without paying. This
+    -- records that the notice was seen and acknowledged; it does NOT clear the
+    -- debt, so the case stays active until the debt is settled.
+    customer_acknowledged_at TIMESTAMPTZ,
     resolved_at TIMESTAMPTZ,
     notes TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
