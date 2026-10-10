@@ -1892,15 +1892,14 @@ export const MerchantDashboard = () => {
             )}
           </div>
 
-          {/* Final Court Letter notices — scoped to this tab only, driven by the
-              real case rows instead of the hardcoded placeholder that used to sit
-              on the dashboard home for every tab. */}
+          {/* 7-day warning / court letter notices — scoped to this tab only,
+              driven by the real case rows instead of the hardcoded placeholder
+              that used to sit on the dashboard home for every tab. */}
           {escalationCases
-            .filter(c => c.court_letter_issued && !c.court_letter_sent_at && c.status !== 'RESOLVED' && c.status !== 'CLOSED')
+            .filter(c => c.warning_sent_at && !c.court_letter_sent_at && c.status !== 'RESOLVED' && c.status !== 'CLOSED')
             .map(ec => {
               const daysLeft = ec.days_until_court_letter ?? null;
               const dueDate = ec.due_date ? String(ec.due_date).split('T')[0] : 'N/A';
-              const letterRef = ec.court_letter_ref || ec.transaction_ref || 'N/A';
               return (
                 <div key={`court-notice-${ec.id}`} className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold animate-fade-in">
                   <div className="flex items-start gap-3">
@@ -1908,25 +1907,25 @@ export const MerchantDashboard = () => {
                       <AlertTriangle className="w-5 h-5 text-amber-400" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-semibold text-slate-100">{t('Final Court Letter Issued', 'ፍጹም የዳኝነት ደብዳቤ ተላክልቷል')}</h3>
+                      <h3 className="font-semibold text-slate-100">{t('7-Day Warning In Progress', 'የ7 ቀን ማስጠንቀቂያ በሂደት ላይ')}</h3>
                       <p className="text-[10px] text-slate-300 mt-1">
                         {t(
-                          `${merchant?.store_name || 'This store'} has issued a formal court letter (Ref: ${letterRef}) for the overdue Dube of ${ec.customer_name} of ${parseFloat(ec.amount).toFixed(2)} ETB, which passed its due date on ${dueDate}.`,
-                          `${merchant?.store_name || 'ህንፃው'} በ${parseFloat(ec.amount).toFixed(2)} ETB የደነበረውን የዱቤ ብድር ስለ ${ec.customer_name} ሲሆን ጊዜው በ${dueDate} ያለፈበት ፍጹም የዳኝነት ደብዳቤ (ማጣቀሻ: ${letterRef}) አስደምጥሷል።`
+                          `${merchant?.store_name || 'This store'} has sent the overdue warning SMS to ${ec.customer_name} for the Dube of ${parseFloat(ec.amount).toFixed(2)} ETB, which passed its due date on ${dueDate}.`,
+                          `${merchant?.store_name || 'ህንፃው'} ለ${ec.customer_name} የ${parseFloat(ec.amount).toFixed(2)} ETB የዱቤ ብድር (ጊዜው ${dueDate} ያለፈበት) የማስጠንቀቂያ ኤስኤምኤስ ተልኳል።`
                         )}
                       </p>
                       <p className="text-[10px] text-slate-400 mt-1">
                         {daysLeft !== null && daysLeft > 0
                           ? t(
-                              `You can send this court letter in ${daysLeft} day${daysLeft === 1 ? '' : 's'}, once the customer's 7-day warning ends.`,
-                              `የደንበኛው የ7 ቀን ማስጠንቀቂያ ካለቀ በኋላ ይህን ደብዳቤ በ${daysLeft} ቀናት መላክ ይችላሉ።`
+                              `The court letter will unlock for sending in ${daysLeft} day${daysLeft === 1 ? '' : 's'}, once the customer's 7-day warning ends.`,
+                              `የደንበኛው የ7 ቀን ማስጠንቀቂያ ካለቀ በኋላ የፍርድ ቤት ደብዳቤው በ${daysLeft} ቀናት ይከፈታል።`
                             )
                           : t('The 7-day warning is over. Send the court letter from the case below.', 'የ7 ቀን ማስጠንቀቂያ አልፏል። ከታች ካለው ጉዳይ የፍርድ ቤት ደብዳቤ ይላኩ።')}
                       </p>
                       <p className="text-[10px] text-slate-400 mt-1">
                         {t(
-                          'The letter is on the customer\'s page. It will only be sent to them by SMS once the 7-day warning ends.',
-                          'ደብዳቤው በደንበኛው ገጽ ላይ ይገኛል። የ7 ቀን ማስጠንቀቂያ ካለቀ በኋላ ብቻ በኤስኤምኤስ ይላካል።'
+                          'No court letter exists yet. It is only created and placed on the customer\'s page when you send it after the 7-day warning.',
+                          'እስካሁን የፍርድ ቤት ደብዳቤ የለም። ከ7 ቀን ማስጠንቀቂያ በኋላ ሲልኩ ብቻ ተፈጥሮ በደንበኛው ገጽ ላይ ይቀመጣል።'
                         )}
                       </p>
                     </div>
@@ -2005,7 +2004,7 @@ export const MerchantDashboard = () => {
                     </div>
                   </div>
 
-                  {ec.court_letter_issued && !ec.court_letter_sent_at && (
+                  {ec.warning_sent_at && !ec.court_letter_sent_at && (
                     <p className={`text-[11px] rounded-lg border p-2 ${
                       ec.court_letter_can_be_sent
                         ? 'bg-red-950/40 border-red-500/30 text-red-300'
@@ -2013,12 +2012,12 @@ export const MerchantDashboard = () => {
                     }`}>
                       {ec.court_letter_can_be_sent
                         ? t(
-                            `The 7-day warning period is over. The letter has been on the customer's page the whole time and is ready to be sent to them by SMS.`,
-                            `የ7 ቀን የማስጠንቀቂያ ጊዜ አልፏል። ደብዳቤው ሙሉ በሙሉ ጊዜ በደንበኛው በገጹ ላይ ነብቷ ሲሆን በኤስኤምኤስ ለመላክ ተዘጋጅቷል።`
+                            `The 7-day warning period is over. You can now send the court letter to the customer — it will be created and placed on their page the moment you send it.`,
+                            `የ7 ቀን የማስጠንቀቂያ ጊዜ አልፏል። አሁን የፍርድ ቤት ደብዳቤውን ለደንበኛው መላክ ይችላሉ — ሲልኩ ተፈጥሮ በገጹ ላይ ይቀመጣል።`
                           )
                         : t(
-                            `The court letter is on the customer's Smart Dube page. It will only unlock for sending in ${ec.days_until_court_letter} day${ec.days_until_court_letter === 1 ? '' : 's'}, once the customer has had the full 7-day warning.`,
-                            `የፍርድ ቤት ደብዳቤው በደንበኛው በገጹ ላይ ይገኛል። ደንበኛው ሙሉ የ7 ቀን ማስጠንቀቂያ ካገኘ በኋላ በ${ec.days_until_court_letter} ቀናት በኤስኤምኤስ ማስታወቅ ይችላሉ።`
+                            `The customer is in their 7-day warning; only the warning SMS has been sent so far. The court letter will unlock for sending in ${ec.days_until_court_letter} day${ec.days_until_court_letter === 1 ? '' : 's'}.`,
+                            `ደንበኛው በ7 ቀን ማስጠንቀቂያ ላይ ነው፤ እስካሁን የማስጠንቀቂያ ኤስኤምኤስ ብቻ ተልኳል። የፍርድ ቤት ደብዳቤ በ${ec.days_until_court_letter} ቀናት ይከፈታል።`
                           )}
                     </p>
                   )}
@@ -2031,7 +2030,7 @@ export const MerchantDashboard = () => {
 
                   {ec.status !== 'RESOLVED' && ec.status !== 'CLOSED' && (
                     <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800">
-                      {ec.court_letter_issued && !ec.court_letter_sent_at && (
+                      {ec.warning_sent_at && !ec.court_letter_sent_at && (
                         <button
                           onClick={() => handleEscalationAction(ec.id, 'COURT_LETTER')}
                           disabled={escalationActionId === ec.id + 'COURT_LETTER' || !ec.court_letter_can_be_sent}

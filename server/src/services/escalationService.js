@@ -6,10 +6,10 @@ const { signCourtLetterToken } = require('./courtLetterToken');
 const { buildPublicUrl, hasPublicBaseUrl } = require('../config/publicUrl');
 
 // A Dube that passes its due date opens an escalation case. On that first day the
-// customer is warned by SMS *and* the court letter is issued, which publishes the
-// letter as an image on their Smart Dube page. The merchant then waits
-// WARNING_PERIOD_DAYS before notifying that customer of the court letter by
-// SMS/MMS, and the sweep never sends that notice on the creditor's behalf.
+// customer is warned by SMS; no court letter exists yet. The merchant then waits
+// WARNING_PERIOD_DAYS, and only after that full 7-day warning may they issue and
+// send the court letter (which publishes the letter as an image on the customer's
+// Smart Dube page), and the sweep never sends that notice on the creditor's behalf.
 const WARNING_PERIOD_DAYS = 7;
 
 // pg returns DATE columns as a Date at local midnight, so toISOString() would
@@ -235,10 +235,10 @@ async function createEscalationCase(customerId, merchantId, transactionId, amoun
  * Issue the court letter for a case: snapshot the notice and publish it as an
  * image on the customer's Smart Dube page.
  *
- * Issuing and notifying are separate acts on purpose. The letter is dated and
- * published the moment the Dube goes overdue, and the customer is told about it
- * by SMS/MMS a grace period later, when the merchant chooses to. The portal and
- * the SMS therefore always read from the same immutable snapshot.
+ * Issuing and notifying are the same act here by design: the letter is created
+ * only when the merchant sends it, which the 7-day warning gate guarantees is
+ * never before the warning is over. The portal and the SMS both read from the
+ * same immutable snapshot.
  *
  * Idempotent: a case that already carries a document gets that document back
  * rather than a second letter. A duplicate legal notice on one debt is never a
@@ -321,17 +321,11 @@ async function issueCourtLetter(caseId, escalationCase, options = {}) {
 }
 
 /**
- * First rung of the ladder: the Dube is overdue, so the customer is warned by SMS
- * and the court letter is issued onto their Smart Dube page.
- *
- * The letter is issued before the warning SMS goes out, and for two reasons. It
- * is the step most likely to fail (database write plus PNG rasterisation), and if
- * it fails first nothing has been sent and the sweep simply tries again
- * tomorrow. And the SMS must never be able to land on a customer whose page has
- * no letter on it.
- *
- * The letter is issued, not notified: the customer has not been told about it by
- * SMS yet. That is the merchant's step, a week later.
+ * First rung of the ladder: the Dube is overdue, so the customer is warned by
+ * SMS only. No court letter is issued or published here — for the whole 7-day
+ * warning the customer is meant to see a warning, nothing legal. The court
+ * letter is only created and put on their page when the merchant sends it, a
+ * full warning week later.
  */
 async function sendWarning(caseId, options = {}) {
   const { trigger = 'MANUAL', actorUserId = null, actorName = 'System' } = options;
@@ -345,8 +339,6 @@ async function sendWarning(caseId, options = {}) {
   if (escalationCase.court_letter_sent_at) {
     throw new Error('The court letter has already been sent to this customer, so no further warning can be sent.');
   }
-
-  const issued = await issueCourtLetter(caseId, escalationCase, { trigger });
 
   const message = getTemplate('OVERDUE_ALERT', {
     customerName: escalationCase.customer_name,
@@ -365,7 +357,7 @@ async function sendWarning(caseId, options = {}) {
   await db.run(
     `UPDATE escalation_cases
      SET status = 'SENT', warning_sent_at = NOW(), updated_at = NOW(),
-         notes = CASE WHEN $2 = 'AUTO' THEN 'Overdue warning sent automatically by the daily debt sweep. Court letter issued to the customer page.'
+         notes = CASE WHEN $2 = 'AUTO' THEN 'Overdue warning sent automatically by the daily debt sweep.'
                    ELSE COALESCE(notes, 'Overdue warning sent by merchant.') END
      WHERE id = $1`,
     [caseId, trigger]
@@ -380,12 +372,11 @@ async function sendWarning(caseId, options = {}) {
       customerId: escalationCase.customer_id,
       amount: escalationCase.amount,
       gateway: smsResult.gateway,
-      trigger,
-      letterRef: issued.letterRef
+      trigger
     }
   });
 
-  return { escalationCase, smsResult, trigger, letterRef: issued.letterRef };
+  return { escalationCase, smsResult, trigger };
 }
 
 /**
@@ -424,8 +415,9 @@ function buildCourtLetterMediaUrl(caseId) {
  * Notify the customer of the court letter by SMS, with the letter itself attached
  * as MMS media when the gateway can carry it.
  *
- * By the time this runs the letter is already on the customer's page and has been
- * there for the whole grace period, so this message only has to point them at it.
+ * This is the step that actually creates the letter on the customer's page and
+ * tells them it is there by SMS. It is hard-gated on the 7-day warning being
+ * over, so a legal notice can never reach the customer earlier.
  * The merchant triggers it; the daily sweep never does, because a legal notice is
  * not something to send on a creditor's behalf without them asking.
  */
@@ -446,9 +438,9 @@ async function sendCourtLetter(caseId, options = {}) {
   }
 
   // The wait is the whole point of the ladder: the customer gets a full week of
-  // warnings after the letter reaches their page before the merchant may notify
-  // them of it. A court letter is never sent before that. Refuse early rather
-  // than shorten a warning the customer was already given in writing.
+  // warnings before any court letter exists, and the letter must never be sent
+  // earlier than that. Refuse early rather than shorten a warning the customer
+  // was already given in writing.
   if (!options.allowResend) {
     const graceDays = escalationCase.warning_period_days || WARNING_PERIOD_DAYS;
 
@@ -467,9 +459,9 @@ async function sendCourtLetter(caseId, options = {}) {
     }
   }
 
-  // Normally issued the moment the Dube went overdue. Issued here as a fallback so
-  // a case that predates the split, or one reached by a path that skipped the
-  // warning step, still gets a letter to notify about.
+  // The letter is created here, and only here: issuing it at warning time would
+  // put a legal notice on the customer's page before their 7-day warning was
+  // over. Idempotent for legacy rows that already carry a letter.
   const issued = await issueCourtLetter(caseId, escalationCase, { trigger });
   const letterRef = issued.letterRef;
 
@@ -570,35 +562,14 @@ async function processOverdueTransaction(tx) {
     return { ...base, action: 'COURT_LETTER_ALREADY_SENT', letterRef: caseRow.court_letter_ref };
   }
 
-  // First day overdue: warn by SMS and issue the letter onto the customer's page.
+  // First day overdue: warn by SMS only. No court letter exists yet — it is the
+  // merchant's decision, made a full warning week later, to issue and send it.
   if (!caseRow.warning_sent_at) {
-    const issued = await sendWarning(escalation.caseId, { trigger: 'AUTO' });
+    await sendWarning(escalation.caseId, { trigger: 'AUTO' });
     return {
       ...base,
       action: 'WARNING_SENT',
-      letterRef: issued.letterRef,
       daysUntilCourtLetter: WARNING_PERIOD_DAYS
-    };
-  }
-
-  // Repair a case that was warned but never published. Rows written before the
-  // letter became part of the first-day sweep, and any letter that failed to
-  // rasterise after the SMS had already gone out, both land here: the warning is
-  // on record but court_letter_issued_at is not. The portal only serves cases
-  // carrying an issue timestamp, so without this the notice stays invisible to
-  // the customer and the case sits in WAITING/AWAITING_MERCHANT forever, because
-  // the only path that issues a letter is the first-day branch above.
-  //
-  // Reload rather than reuse caseRow: createEscalationCase returns a narrow row
-  // for an existing case, and issueCourtLetter needs the customer, merchant and
-  // amount columns to build the notice.
-  const full = await loadEscalationCase(escalation.caseId);
-  if (full && !full.court_letter_issued_at) {
-    const issued = await issueCourtLetter(escalation.caseId, full, { trigger: 'AUTO' });
-    return {
-      ...base,
-      action: 'COURT_LETTER_ISSUED',
-      letterRef: issued.letterRef
     };
   }
 
@@ -606,13 +577,11 @@ async function processOverdueTransaction(tx) {
   const elapsed = daysSince(caseRow.warning_sent_at);
 
   if (elapsed >= gracePeriod) {
-    // The grace period is over and the letter has been sitting on the customer's
-    // page the whole time. Stop here: the notice is the merchant's to send, from
-    // the dashboard, on their own customer.
+    // The 7-day warning is over. The merchant can now issue and send the court
+    // letter from the dashboard, on their own customer.
     return {
       ...base,
       action: 'AWAITING_MERCHANT',
-      letterRef: caseRow.court_letter_ref,
       daysSinceWarning: elapsed
     };
   }
@@ -621,9 +590,11 @@ async function processOverdueTransaction(tx) {
 }
 
 /**
- * Sweep every overdue Dube: warn it and issue its court letter on the first day,
- * then leave it alone while the grace period runs. Safe to call repeatedly:
- * anything already warned, already issued, or already settled is left alone.
+ * Sweep every overdue Dube: warn it by SMS on the first day, then leave it alone
+ * for the 7-day warning. The court letter is created and sent only when the
+ * merchant chooses to, a full warning week later. Safe to call repeatedly:
+ * anything already warned, already settled, or whose warning is still running is
+ * left alone.
  */
 async function checkAndEscalateOverdue() {
   const today = toDateOnly(new Date());
@@ -696,8 +667,8 @@ async function getCustomerNotices(profileIds) {
     // that the notice was seen; it does not settle the debt, so is_settled is
     // still false afterwards and the case stays active.
     is_acknowledged: !!row.customer_acknowledged_at,
-    // The grace period runs from the day the letter reached the page, not from
-    // the day the merchant got round to sending the notice.
+    // The letter is created the day it is sent, so days since issue IS days
+    // since the customer was first told the notice exists.
     days_since_issued: daysSince(row.court_letter_issued_at),
     // Whether the merchant has since notified them by SMS. The portal says so,
     // because a customer who has not had the text should not be left guessing
@@ -829,7 +800,7 @@ function startEscalationScheduler() {
     if (typeof bootTimer.unref === 'function') bootTimer.unref();
   }
 
-  console.log(`[ESCALATION] Daily debt sweep armed (every ${SWEEP_INTERVAL_MINUTES} min, once per day, ${WARNING_PERIOD_DAYS} day grace period before the merchant can send a court letter).`);
+  console.log(`[ESCALATION] Daily debt sweep armed (every ${SWEEP_INTERVAL_MINUTES} min, once per day, ${WARNING_PERIOD_DAYS} day warning period before the merchant can send a court letter).`);
   return sweepTimer;
 }
 

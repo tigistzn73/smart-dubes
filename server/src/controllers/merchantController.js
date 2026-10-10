@@ -520,7 +520,7 @@ async function triggerEscalationWarning(req, res) {
     });
 
     res.json({
-      message: 'Warning SMS sent to customer. The court letter is now on their Smart Dube page.',
+      message: 'Warning SMS sent to customer. The court letter will only be created and sent after the 7-day warning.',
       escalation: result
     });
   } catch (err) {
@@ -570,7 +570,7 @@ async function triggerCourtLetter(req, res) {
     }
 
     res.json({
-      message: 'Court letter sent to the customer by SMS. It has been on their Smart Dube page for the full grace period.',
+      message: 'Court letter sent to the customer by SMS and now on their Smart Dube page.',
       letterRef: result.letterRef,
       courtLetter: result.courtLetterBody,
       escalation: result
