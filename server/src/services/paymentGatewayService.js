@@ -16,7 +16,7 @@ async function settleEscalations(transactionIds) {
 /**
  * Process a repayment transaction from Telebirr, Chapa, or CBE Birr
  */
-async function processRepayment({ transactionId, customerId, amount, gateway, referenceCode, receiptUrl, userId, actorName }) {
+async function processRepayment({ transactionId, customerId, amount, gateway, referenceCode, receiptUrl, userId, actorName, installmentNo }) {
   const transaction = await db.get('SELECT * FROM credit_transactions WHERE id = $1', [transactionId]);
   if (!transaction) {
     throw new Error('Credit transaction record not found.');
@@ -101,9 +101,9 @@ async function processRepayment({ transactionId, customerId, amount, gateway, re
     return await db.transaction(async (client) => {
       // 1. Create repayment entry
       await client.query(`
-        INSERT INTO repayments (repayment_ref, transaction_id, customer_id, merchant_id, amount, payment_gateway, reference_code, receipt_url, status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      `, [repaymentRef, transactionId, customerId, transaction.merchant_id, amount, gateway, refCode, receiptUrl || null, initialStatus]);
+        INSERT INTO repayments (repayment_ref, transaction_id, customer_id, merchant_id, amount, payment_gateway, reference_code, receipt_url, installment_no, status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `, [repaymentRef, transactionId, customerId, transaction.merchant_id, amount, gateway, refCode, receiptUrl || null, installmentNo || null, initialStatus]);
 
       if (isReceiptUpload) {
         // Log Gateway Flow
@@ -283,6 +283,27 @@ async function approveUploadedReceipt({ repaymentId, action, merchantUserId, act
     return await db.transaction(async (client) => {
       // 1. Mark repayment as COMPLETED
       await client.query('UPDATE repayments SET status = $1 WHERE id = $2', ['COMPLETED', repaymentId]);
+
+      // 1b. Once an uploaded installment receipt is approved, flip that exact
+      // installment on the customer's ACTIVE schedule to PAID. It stayed at
+      // SCHEDULED (shown as Pending Review) until this moment.
+      if (repayment.installment_no) {
+        const plan = await client.query(
+          `SELECT id, installments_json FROM customer_schedules
+           WHERE customer_id = $1 AND status = 'ACTIVE' ORDER BY id DESC LIMIT 1`,
+          [repayment.customer_id]
+        );
+        if (plan.rows.length > 0) {
+          const planInsts = JSON.parse(plan.rows[0].installments_json || '[]');
+          const approvedInsts = planInsts.map(inst =>
+            inst.installmentNo === repayment.installment_no ? { ...inst, status: 'PAID' } : inst
+          );
+          await client.query(
+            'UPDATE customer_schedules SET installments_json = $1 WHERE id = $2',
+            [JSON.stringify(approvedInsts), plan.rows[0].id]
+          );
+        }
+      }
 
       // 2. Deduct customer balance
       const newBalance = Math.max(0, parseFloat(customer.current_balance) - parseFloat(repayment.amount));

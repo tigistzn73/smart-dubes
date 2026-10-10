@@ -260,11 +260,15 @@ async function initiateRepayment(req, res) {
       referenceCode,
       receiptUrl,
       userId: req.user.id,
-      actorName: req.user.fullName
+      actorName: req.user.fullName,
+      installmentNo: installmentNo ? parseInt(installmentNo, 10) : null
     });
 
-    // If an installment repayment was specified, update installment status in active schedule
-    if (installmentNo) {
+    // If an installment repayment was specified, update installment status in active schedule.
+    // Receipt-upload installments stay at PENDING REVIEW until the merchant approves or
+    // rejects the uploaded receipt — approval (not upload) is what flips the installment to
+    // PAID (see approveUploadedReceipt). Instant gateways flip it to PAID right away.
+    if (installmentNo && paymentGateway !== 'RECEIPT_UPLOAD') {
       const scheduleRow = await db.get(`SELECT * FROM customer_schedules WHERE user_id = $1 AND status = 'ACTIVE' ORDER BY id DESC LIMIT 1`, [req.user.id]);
       if (scheduleRow) {
         let installments = JSON.parse(scheduleRow.installments_json || '[]');

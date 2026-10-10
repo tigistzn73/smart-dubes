@@ -410,23 +410,28 @@ export const CustomerPortal = () => {
       .filter(r => r.status === 'PENDING' && r.transaction_id)
       .map(r => Number(r.transaction_id))
   );
+  // Installments whose uploaded receipt is still awaiting merchant approval. Keyed
+  // by store (merchant_id) + installment number so the Active Schedule card can
+  // flip that one installment to "Pending Review" until it is approved (PAID) or
+  // rejected (back to payable).
+  const pendingReviewInstallmentKeys = new Set(
+    (repayments || [])
+      .filter(r => r.status === 'PENDING' && r.installment_no)
+      .map(r => `${r.merchant_id}:${r.installment_no}`)
+  );
   // Receipts covered by an ACTIVE repayment schedule are paid through that plan,
   // so they are hidden from the itemized pending list and only shown on the Active
-  // Repayment Schedule cards above (with their PAID/SCHEDULED installment status) —
-  // unless a payment is currently PENDING REVIEW, in which case the receipt is kept
-  // visible as a red row until the merchant checks and approves (or rejects) it.
-  // A per-receipt plan (transaction_id set) covers that exact receipt; a
-  // store-level/aggregate plan (transaction_id null) covers every pending receipt
-  // of that customer profile at that store.
+  // Repayment Schedule cards above (with their PAID / Pending Review / payable
+  // installment status). A per-receipt plan (transaction_id set) covers that exact
+  // receipt; a store-level/aggregate plan (transaction_id null) covers every
+  // pending receipt of that customer profile at that store.
   const scheduledTransactionIds = new Set();
   allActiveSchedules.forEach(s => {
     if (s.transaction_id) {
-      if (!pendingReviewTxIds.has(Number(s.transaction_id))) {
-        scheduledTransactionIds.add(Number(s.transaction_id));
-      }
+      scheduledTransactionIds.add(Number(s.transaction_id));
     } else if (s.customer_id) {
       pendingTransactions.forEach(tx => {
-        if (Number(tx.customer_id) === Number(s.customer_id) && !pendingReviewTxIds.has(Number(tx.id))) {
+        if (Number(tx.customer_id) === Number(s.customer_id)) {
           scheduledTransactionIds.add(Number(tx.id));
         }
       });
@@ -1169,6 +1174,10 @@ export const CustomerPortal = () => {
                             {matchingSchedule.installments.map(inst => {
                               const isPaid = inst.status === 'PAID';
                               const isNextToPay = nextUnpaidInst && nextUnpaidInst.installmentNo === inst.installmentNo;
+                              // Uploaded receipt not yet approved/rejected by the merchant:
+                              // the installment is neither payable again nor paid yet.
+                              const isPendingReview = inst.status !== 'PAID' &&
+                                pendingReviewInstallmentKeys.has(`${activeProfile.merchant_id}:${inst.installmentNo}`);
 
                               return (
                                 <div
@@ -1208,6 +1217,11 @@ export const CustomerPortal = () => {
                                       <span className="px-3 py-1.5 rounded-lg text-xs bg-emerald-100 text-emerald-700 font-bold border border-emerald-200 flex items-center gap-1 font-mono">
                                         <CheckCircle2 className="w-3.5 h-3.5" />
                                         <span>{t('PAID', 'ተከፍሏል')}</span>
+                                      </span>
+                                    ) : isPendingReview ? (
+                                      <span className="px-3 py-1.5 rounded-lg text-xs bg-red-50 text-red-700 font-bold border border-red-300 flex items-center gap-1.5 font-mono">
+                                        <Clock className="w-3.5 h-3.5" />
+                                        <span>{t('Pending Review', 'በግምገማ ላይ')}</span>
                                       </span>
                                     ) : (
                                       <button

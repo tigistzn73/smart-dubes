@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS repayments (
     payment_gateway VARCHAR(30) NOT NULL CHECK (payment_gateway IN ('TELEBIRR', 'CBE_BIRR', 'CHAPA', 'CASH', 'RECEIPT_UPLOAD')),
     reference_code VARCHAR(100) NOT NULL,
     receipt_url TEXT,
+    installment_no INT,
     status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'COMPLETED', 'REJECTED')),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
