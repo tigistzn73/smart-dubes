@@ -523,9 +523,6 @@ setError('');
               {t('Smart Dube Digital Ledger', 'ስማርት ዱቤ ዲጂታል ሌጀር')}
             </h1>
             <p className="text-[10px] text-slate-400">{t('Ethiopian BNPL Credit & Repayment Framework', 'የኢትዮጵያ የዱቤ ብድር እና ክፍያ ስርዓት')}</p>
-            <p className="text-[10px] text-slate-500 pt-2">
-              Copyright &copy; 2022 - 2026 All Rights Reserved - Developed By Tigist Zinabu.
-            </p>
           </div>
         )}
 
@@ -553,7 +550,6 @@ setError('');
                 <Lock className="w-4 h-4 text-emerald-400" />
                 {t('Sign In to Your Account', 'ወደ መለያዎ ይግቡ')}
               </h3>
-              <p className="text-[11px] text-slate-400">{t('JWT-authenticated secure login with bcrypt password verification', 'በJWT የተረጋገጠ ደህንነቱ የተጠበቀ መግቢያ')}</p>
             </div>
 
             <form noValidate onSubmit={handleSignIn} className="space-y-3">
@@ -1152,6 +1148,11 @@ setError('');
             </div>
           </div>
         )}
+
+        {/* Footer */}
+        <div className="text-center text-xs text-slate-500 pt-6">
+          Copyright &copy; 2022 - 2026 All Rights Reserved - Developed By Tigist Zinabu.
+        </div>
       </div>
     </div>
   );
