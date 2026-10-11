@@ -33,6 +33,32 @@
   transition: background 0.4s ease, border-color 0.4s ease;
 }
 
+/* ============================================================
+   Login Page Background
+   The merchant artwork sits behind the auth cards in every theme.
+   Each theme paints its own scrim over the photo so the form stays
+   readable while the image still shows through: a light wash in the
+   bright theme, a dark wash in the dark themes.
+   ============================================================ */
+.login-page {
+  position: relative;
+  min-height: calc(100vh - var(--nav-h, 52px));
+  background-image:
+    linear-gradient(rgba(11, 15, 25, 0.72), rgba(11, 15, 25, 0.72)),
+    url('/login-bg.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  transition: background-color 0.4s ease;
+}
+
+[data-theme="light"] .login-page {
+  background-image:
+    linear-gradient(rgba(248, 250, 252, 0.55), rgba(248, 250, 252, 0.55)),
+    url('/login-bg.png');
+}
+
 /* Data-theme custom styling overrides */
 [data-theme="ocean"] .glass-panel {
   background: rgba(15, 33, 58, 0.85);
