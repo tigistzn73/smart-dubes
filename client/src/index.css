@@ -68,10 +68,20 @@
   filter: drop-shadow(0 1px 2px rgba(255, 255, 255, 0.95)) drop-shadow(0 0 8px rgba(255, 255, 255, 0.85));
 }
 
-[data-theme="light"] .login-page .login-subtitle,
-[data-theme="light"] .login-page .login-footer {
+[data-theme="light"] .login-page .login-subtitle {
   color: #1E293B !important;
   text-shadow: 0 1px 2px rgba(255, 255, 255, 0.95), 0 0 6px rgba(255, 255, 255, 0.85);
+}
+
+/* Copyright footer is white in every theme. On the light theme that would wash
+   into the photo, so it gets a dark halo to stay legible. */
+.login-page .login-footer {
+  color: #FFFFFF !important;
+}
+
+[data-theme="light"] .login-page .login-footer {
+  color: #FFFFFF !important;
+  text-shadow: 0 1px 3px rgba(15, 23, 42, 0.85), 0 0 6px rgba(15, 23, 42, 0.65);
 }
 
 /* Data-theme custom styling overrides */
