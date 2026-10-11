@@ -519,10 +519,10 @@ setError('');
         {/* Header — shown only on the sign-in view, not on register/reset */}
         {authView === 'SIGN_IN' && (
           <div className="text-center space-y-1">
-            <h1 className="text-xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-yellow-400 to-amber-500 bg-clip-text text-transparent">
+            <h1 className="login-title text-xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-yellow-400 to-amber-500 bg-clip-text text-transparent">
               {t('Smart Dube Digital Ledger', 'ስማርት ዱቤ ዲጂታል ሌጀር')}
             </h1>
-            <p className="text-[10px] text-slate-400">{t('Ethiopian BNPL Credit & Repayment Framework', 'የኢትዮጵያ የዱቤ ብድር እና ክፍያ ስርዓት')}</p>
+            <p className="login-subtitle text-[10px] text-slate-400">{t('Ethiopian BNPL Credit & Repayment Framework', 'የኢትዮጵያ የዱቤ ብድር እና ክፍያ ስርዓት')}</p>
           </div>
         )}
 
@@ -1150,7 +1150,7 @@ setError('');
         )}
 
         {/* Footer */}
-        <div className="text-center text-xs text-slate-500 pt-6">
+        <div className="login-footer text-center text-xs text-slate-500 pt-6">
           Copyright &copy; 2022 - 2026 All Rights Reserved - Developed By Tigist Zinabu.
         </div>
       </div>

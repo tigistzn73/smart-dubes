@@ -59,6 +59,21 @@
     url('/login-bg.png');
 }
 
+/* The artwork stays visible in the bright theme, but the three bits of text
+   that sit directly on the photo — the title, the tagline and the footer — need
+   help to stay legible: deeper ink plus a soft white halo. The title keeps its
+   gradient, just a darker one so the yellow doesn't wash out on a light photo. */
+[data-theme="light"] .login-page .login-title {
+  background-image: linear-gradient(to right, #065F46, #B45309, #92400E) !important;
+  filter: drop-shadow(0 1px 2px rgba(255, 255, 255, 0.95)) drop-shadow(0 0 8px rgba(255, 255, 255, 0.85));
+}
+
+[data-theme="light"] .login-page .login-subtitle,
+[data-theme="light"] .login-page .login-footer {
+  color: #1E293B !important;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.95), 0 0 6px rgba(255, 255, 255, 0.85);
+}
+
 /* Data-theme custom styling overrides */
 [data-theme="ocean"] .glass-panel {
   background: rgba(15, 33, 58, 0.85);
