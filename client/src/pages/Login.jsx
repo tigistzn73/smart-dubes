@@ -19,7 +19,8 @@ import {
   ArrowLeft,
   Eye,
   EyeOff,
-  Upload
+  Upload,
+  Rocket
 } from 'lucide-react';
 
 // Remembering the phone number is opt-in, and the password is never stored.
@@ -149,6 +150,11 @@ export const Login = () => {
 
   // Auth View: SIGN_IN | REGISTER | FORGOT_PASSWORD | RESET_PASSWORD
   const [authView, setAuthView] = useState('SIGN_IN');
+
+  // The auth panel starts hidden. Guests first see the landing hero and only
+  // get the sign-in/register forms once they click "Get Started", so the login
+  // page is never shown before the visitor asks for it.
+  const [showAuth, setShowAuth] = useState(false);
 
   // Sign In State
   // Prefilled from the last successful sign-in. The password starts empty and is
@@ -352,6 +358,7 @@ export const Login = () => {
   // the form into view, since guests are already on this page.
   useEffect(() => {
     const handleOpenSignIn = () => {
+      setShowAuth(true);
       setAuthView('SIGN_IN');
       setError('');
       setSuccess('');
@@ -497,6 +504,45 @@ setError('');
       // gives an empty box rather than the previous attempt still sitting there.
       setPassword('');
     };
+
+  // Guests land here first. The sign-in/register panel is only rendered after
+  // the "Get Started" button is pressed, so the login page never shows up front.
+  if (!showAuth) {
+    return (
+      <div className="login-page flex flex-col items-center justify-center py-10 px-4">
+        <div className="w-full max-w-md text-center space-y-6 my-auto">
+          <div className="space-y-3">
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-yellow-400 to-amber-500 bg-clip-text text-transparent">
+              {t('Smart Dube Digital Ledger', 'ስማርት ዱቤ ዲጂታል ሌጀር')}
+            </h1>
+            <p className="text-sm text-slate-300">
+              {t('Ethiopian BNPL Credit & Repayment Framework', 'የኢትዮጵያ የዱቤ ብድር እና ክፍያ ስርዓት')}
+            </p>
+          </div>
+
+          <div className="glass-panel rounded-2xl border border-slate-700/80 shadow-2xl p-6 space-y-4 bg-slate-900/90">
+            <p className="text-xs text-slate-300 leading-relaxed">
+              {t(
+                'Neighborhood credit, digital ledgers, Fayda KYC and instant repayment tracking — all in one place. Press Get Started to sign in or create an account.',
+                'የጎረቤት ዱቤ፣ ዲጂታል ሌጀር፣ ፋይዳ ማንነት ማረጋገጫ እና ፈጣን የክፍያ መከታተያ — ሁሉም በአንድ ቦታ። ለመግባት ወይም መለያ ለመፍጠር "ተጀምር" ይጫኑ።'
+              )}
+            </p>
+            <button
+              onClick={() => setShowAuth(true)}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:via-teal-400 hover:to-emerald-500 text-white font-extrabold text-sm shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer"
+            >
+              <Rocket className="w-4 h-4" />
+              <span>{t('Get Started', 'ተጀምር')}</span>
+            </button>
+          </div>
+
+          <div className="text-center text-xs text-slate-500 pt-2">
+            Copyright &copy; 2022 - 2026 All Rights Reserved - Developed By Tigist Zinabu.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="login-page flex flex-col items-center py-4 px-4">
