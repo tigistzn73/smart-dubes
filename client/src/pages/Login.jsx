@@ -531,16 +531,18 @@ setError('');
     <div className="login-page flex flex-col items-center py-4 px-4">
 
       <div ref={panelRef} className="w-full max-w-md space-y-3.5 my-auto">
-        {/* Header */}
-        <div className="text-center space-y-1">
-          <h1 className="text-xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-yellow-400 to-amber-500 bg-clip-text text-transparent">
-            {t('Smart Dube Digital Ledger', 'ስማርት ዱቤ ዲጂታል ሌጀር')}
-          </h1>
-          <p className="text-[10px] text-slate-400">{t('Ethiopian BNPL Credit & Repayment Framework', 'የኢትዮጵያ የዱቤ ብድር እና ክፍያ ስርዓት')}</p>
-          <p className="text-[10px] text-slate-500 pt-2">
-            Copyright &copy; 2022 - 2026 All Rights Reserved - Developed By Tigist Zinabu.
-          </p>
-        </div>
+        {/* Header — shown only on the sign-in view, not on register/reset */}
+        {authView === 'SIGN_IN' && (
+          <div className="text-center space-y-1">
+            <h1 className="text-xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-yellow-400 to-amber-500 bg-clip-text text-transparent">
+              {t('Smart Dube Digital Ledger', 'ስማርት ዱቤ ዲጂታል ሌጀር')}
+            </h1>
+            <p className="text-[10px] text-slate-400">{t('Ethiopian BNPL Credit & Repayment Framework', 'የኢትዮጵያ የዱቤ ብድር እና ክፍያ ስርዓት')}</p>
+            <p className="text-[10px] text-slate-500 pt-2">
+              Copyright &copy; 2022 - 2026 All Rights Reserved - Developed By Tigist Zinabu.
+            </p>
+          </div>
+        )}
 
 
 
