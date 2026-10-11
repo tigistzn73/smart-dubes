@@ -480,23 +480,26 @@ setError('');
     };
 
   return (
-    <div className="flex flex-col md:flex-row items-center justify-center md:justify-between gap-6 md:gap-10 py-6 px-4 md:min-h-screen md:w-full">
+    <div className="relative flex flex-col items-center justify-center md:justify-center gap-6 md:gap-10 py-6 px-4 w-full min-h-screen overflow-hidden">
 
-      {/* Left column: brand image + tagline (flush to the left margin) */}
-      <div className="flex flex-col items-center md:items-start text-center md:text-left space-y-3 md:max-w-xl md:justify-center">
-        <img
-          src="/smart-dube-brand.png"
-          alt="Smart Dube"
-          className="w-48 md:w-full md:max-w-md rounded-2xl shadow-2xl shadow-emerald-500/20 border border-slate-700/60 md:ml-0"
-        />
-        <h1 className="text-2xl md:text-3xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-yellow-400 to-amber-500 bg-clip-text text-transparent md:text-left">
+      {/* Full-screen background image */}
+      <img
+        src="/smart-dube-brand.png"
+        alt="Smart Dube"
+        className="fixed inset-0 w-full h-full object-cover z-0"
+      />
+      <div className="fixed inset-0 bg-black/70 z-0" />
+
+      {/* Branding overlay */}
+      <div className="relative z-10 flex flex-col items-center text-center space-y-2 md:space-y-3 max-w-lg">
+        <h1 className="text-3xl md:text-4xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-yellow-400 to-amber-500 bg-clip-text text-transparent">
           {t('Smart Dube Digital Ledger', 'ስማርት ዱቤ ዲጂታል ሌጀር')}
         </h1>
-        <p className="text-xs md:text-sm text-slate-400 md:text-left">{t('Ethiopian BNPL Credit & Repayment Framework', 'የኢትዮጵያ የዱቤ ብድር እና ክፍያ ስርዓት')}</p>
+        <p className="text-sm text-slate-200">{t('Ethiopian BNPL Credit & Repayment Framework', 'የኢትዮጵያ የዱቤ ብድር እና ክፍያ ስርዓት')}</p>
       </div>
 
-      {/* Right column: auth forms */}
-      <div className="w-full max-w-md space-y-3.5 my-auto">
+      {/* Auth forms */}
+      <div className="relative z-10 w-full max-w-md space-y-3.5 my-auto">
 
 
 
