@@ -19,8 +19,7 @@ import {
   ArrowLeft,
   Eye,
   EyeOff,
-  Upload,
-  Rocket
+  Upload
 } from 'lucide-react';
 
 // Remembering the phone number is opt-in, and the password is never stored.
@@ -518,22 +517,6 @@ setError('');
             <p className="text-sm text-slate-300">
               {t('Ethiopian BNPL Credit & Repayment Framework', 'የኢትዮጵያ የዱቤ ብድር እና ክፍያ ስርዓት')}
             </p>
-          </div>
-
-          <div className="glass-panel rounded-2xl border border-slate-700/80 shadow-2xl p-6 space-y-4 bg-slate-900/90">
-            <p className="text-xs text-slate-300 leading-relaxed">
-              {t(
-                'Neighborhood credit, digital ledgers, Fayda KYC and instant repayment tracking — all in one place. Press Get Started to sign in or create an account.',
-                'የጎረቤት ዱቤ፣ ዲጂታል ሌጀር፣ ፋይዳ ማንነት ማረጋገጫ እና ፈጣን የክፍያ መከታተያ — ሁሉም በአንድ ቦታ። ለመግባት ወይም መለያ ለመፍጠር "ተጀምር" ይጫኑ።'
-              )}
-            </p>
-            <button
-              onClick={() => setShowAuth(true)}
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:via-teal-400 hover:to-emerald-500 text-white font-extrabold text-sm shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer"
-            >
-              <Rocket className="w-4 h-4" />
-              <span>{t('Get Started', 'ተጀምር')}</span>
-            </button>
           </div>
 
           <div className="text-center text-xs text-slate-500 pt-2">
