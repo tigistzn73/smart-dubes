@@ -24,7 +24,8 @@ import {
   CheckCircle2,
   Building,
   Server,
-  Lock
+  Lock,
+  Rocket
 } from 'lucide-react';
 
 export const Navbar = () => {
@@ -94,6 +95,13 @@ export const Navbar = () => {
   const handleNavClick = (tabId) => {
     window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: tabId } }));
     setMobileDrawerOpen(false);
+  };
+
+  // Guests land on the sign-in view already. This button makes that explicit:
+  // it forces the Login page back to SIGN_IN (in case the visitor wandered into
+  // Register / Forgot Password) and scrolls the form into view.
+  const handleGetStarted = () => {
+    window.dispatchEvent(new CustomEvent('open-signin'));
   };
 
   const role = (user?.role || '').toUpperCase();
@@ -292,6 +300,14 @@ export const Navbar = () => {
           {/* Guest Landing Language & Theme Controls */}
           {!user && (
             <div className="flex items-center gap-2">
+              <button
+                onClick={handleGetStarted}
+                className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:via-teal-400 hover:to-emerald-500 text-white text-[10px] sm:text-[11px] font-extrabold shadow-md shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-[1.03] active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Go to sign in"
+              >
+                <Rocket className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{t('Get Started', 'ተጀምር')}</span>
+              </button>
               <div className="flex items-center bg-slate-800/80 p-0.5 rounded-xl border border-slate-700/60 shadow-md">
                 <button
                   onClick={() => setLang('EN')}

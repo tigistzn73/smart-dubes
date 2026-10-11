@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import {
@@ -142,6 +142,10 @@ export const Login = () => {
   const { loginWithToken, switchDemoRole, register, forgotPassword, resetPassword } = useAuth();
   const { lang, setLang } = useTheme();
   const t = (en, am) => (lang === 'EN' ? en : am);
+
+  // Points at the auth panel so the navbar's "Get Started" button can scroll
+  // the sign-in form back into view after the visitor has moved to another view.
+  const panelRef = useRef(null);
 
   // Auth View: SIGN_IN | REGISTER | FORGOT_PASSWORD | RESET_PASSWORD
   const [authView, setAuthView] = useState('SIGN_IN');
@@ -344,6 +348,21 @@ export const Login = () => {
   };
 
   // ========== FORGOT PASSWORD ==========
+  // Navbar "Get Started" / guest entry point: force the sign-in view and bring
+  // the form into view, since guests are already on this page.
+  useEffect(() => {
+    const handleOpenSignIn = () => {
+      setAuthView('SIGN_IN');
+      setError('');
+      setSuccess('');
+      window.requestAnimationFrame(() => {
+        panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    };
+    window.addEventListener('open-signin', handleOpenSignIn);
+    return () => window.removeEventListener('open-signin', handleOpenSignIn);
+  }, []);
+
   // Counts the resend cooldown down to zero once a code has been requested.
   useEffect(() => {
     if (resendCooldown <= 0) return undefined;
@@ -482,7 +501,7 @@ setError('');
   return (
     <div className="login-page flex flex-col items-center py-4 px-4">
 
-      <div className="w-full max-w-md space-y-3.5 my-auto">
+      <div ref={panelRef} className="w-full max-w-md space-y-3.5 my-auto">
         {/* Header */}
         <div className="text-center space-y-1">
           <h1 className="text-xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-yellow-400 to-amber-500 bg-clip-text text-transparent">
