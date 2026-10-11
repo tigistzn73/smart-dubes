@@ -504,26 +504,11 @@ setError('');
       setPassword('');
     };
 
-  // Guests land here first. The sign-in/register panel is only rendered after
-  // the "Get Started" button is pressed, so the login page never shows up front.
+  // Guests land here first. Only the background shows until "Get Started" is
+  // pressed; the branding and the sign-in panel appear only on the sign-in page.
   if (!showAuth) {
     return (
-      <div className="login-page flex flex-col items-center justify-center py-10 px-4">
-        <div className="w-full max-w-md text-center space-y-6 my-auto">
-          <div className="space-y-3">
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-yellow-400 to-amber-500 bg-clip-text text-transparent">
-              {t('Smart Dube Digital Ledger', 'ስማርት ዱቤ ዲጂታል ሌጀር')}
-            </h1>
-            <p className="text-sm text-slate-300">
-              {t('Ethiopian BNPL Credit & Repayment Framework', 'የኢትዮጵያ የዱቤ ብድር እና ክፍያ ስርዓት')}
-            </p>
-          </div>
-
-          <div className="text-center text-xs text-slate-500 pt-2">
-            Copyright &copy; 2022 - 2026 All Rights Reserved - Developed By Tigist Zinabu.
-          </div>
-        </div>
-      </div>
+      <div className="login-page flex flex-col items-center justify-center py-10 px-4" />
     );
   }
 
