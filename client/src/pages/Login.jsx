@@ -480,19 +480,19 @@ setError('');
     };
 
   return (
-    <div className="flex flex-col md:flex-row items-center justify-center gap-6 md:gap-10 py-6 px-4 md:min-h-screen">
+    <div className="flex flex-col md:flex-row items-center justify-center md:justify-between gap-6 md:gap-10 py-6 px-4 md:min-h-screen md:w-full">
 
-      {/* Left column: brand image + tagline */}
-      <div className="flex flex-col items-center text-center space-y-3 md:flex-1 md:max-w-xl">
+      {/* Left column: brand image + tagline (flush to the left margin) */}
+      <div className="flex flex-col items-center md:items-start text-center md:text-left space-y-3 md:max-w-xl md:justify-center">
         <img
           src="/smart-dube-brand.png"
           alt="Smart Dube"
-          className="w-48 md:w-full md:max-w-md rounded-2xl shadow-2xl shadow-emerald-500/20 border border-slate-700/60"
+          className="w-48 md:w-full md:max-w-md rounded-2xl shadow-2xl shadow-emerald-500/20 border border-slate-700/60 md:ml-0"
         />
-        <h1 className="text-2xl md:text-3xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-yellow-400 to-amber-500 bg-clip-text text-transparent">
+        <h1 className="text-2xl md:text-3xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-yellow-400 to-amber-500 bg-clip-text text-transparent md:text-left">
           {t('Smart Dube Digital Ledger', 'ስማርት ዱቤ ዲጂታል ሌጀር')}
         </h1>
-        <p className="text-xs md:text-sm text-slate-400">{t('Ethiopian BNPL Credit & Repayment Framework', 'የኢትዮጵያ የዱቤ ብድር እና ክፍያ ስርዓት')}</p>
+        <p className="text-xs md:text-sm text-slate-400 md:text-left">{t('Ethiopian BNPL Credit & Repayment Framework', 'የኢትዮጵያ የዱቤ ብድር እና ክፍያ ስርዓት')}</p>
       </div>
 
       {/* Right column: auth forms */}
