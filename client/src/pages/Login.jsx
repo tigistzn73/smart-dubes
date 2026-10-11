@@ -485,6 +485,11 @@ setError('');
       <div className="w-full max-w-md space-y-3.5 my-auto">
         {/* Header */}
         <div className="text-center space-y-1">
+          <img
+            src="/smart-dube-brand.png"
+            alt="Smart Dube"
+            className="w-40 mx-auto rounded-2xl shadow-lg shadow-emerald-500/20 border border-slate-700/60"
+          />
           <h1 className="text-xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-yellow-400 to-amber-500 bg-clip-text text-transparent">
             {t('Smart Dube Digital Ledger', 'ስማርት ዱቤ ዲጂታል ሌጀር')}
           </h1>
