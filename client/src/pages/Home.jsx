@@ -252,7 +252,7 @@ export const Home = ({ onGetStarted }) => {
           </div>
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-2.5">
-            {['Fayda KYC', 'JWT Secured', 'Audit Trail', 'SMS Reminders'].map((chip) => (
+            {['Fayda KYC', 'Secured', 'Audit Trail', 'SMS Reminders'].map((chip) => (
               <span key={chip} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#151C2C]/80 border border-[#1E293B] text-[#CBD5E1] text-[11px] font-semibold">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                 {chip}
@@ -446,7 +446,7 @@ export const Home = ({ onGetStarted }) => {
             ))}
           </div>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-5 text-[11px] text-[#64748B] font-semibold">
-            <span className="inline-flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" />{t('JWT Secured', 'በJWT የተጠበቀ')}</span>
+            <span className="inline-flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" />{t('Secured', 'የተጠበቀ')}</span>
             <span className="inline-flex items-center gap-1.5"><BarChart3 className="w-3.5 h-3.5" />{t('Real-time Balances', 'ቀጥታ ቀሪ ሂሳብ')}</span>
             <span className="inline-flex items-center gap-1.5"><AlarmClock className="w-3.5 h-3.5" />{t('Due-date Alerts', 'የቀን ማሳሰቢያ')}</span>
           </div>
