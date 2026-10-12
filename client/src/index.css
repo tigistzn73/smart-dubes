@@ -88,6 +88,10 @@
   --home-accent: #34D399;
   --home-accent2: #FACC15;
   --home-accent3: #38BDF8;
+  --home-showcase-bg: #000000;
+  --home-showcase-text: #FFFFFF;
+  --home-showcase-border: rgba(255, 255, 255, 0.10);
+  --home-showcase-eyebrow: #34D399;
 }
 
 [data-theme="light"] .home-page {
@@ -104,6 +108,10 @@
   --home-accent: #059669;
   --home-accent2: #B45309;
   --home-accent3: #0284C7;
+  --home-showcase-bg: #FFFFFF;
+  --home-showcase-text: #0F172A;
+  --home-showcase-border: #E2E8F0;
+  --home-showcase-eyebrow: #059669;
 }
 
 /* The hero heading and stat numbers carry a gradient. The bright version uses
