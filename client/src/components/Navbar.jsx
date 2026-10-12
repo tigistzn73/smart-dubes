@@ -25,7 +25,8 @@ import {
   Building,
   Server,
   Lock,
-  Rocket
+  Rocket,
+  ArrowLeft
 } from 'lucide-react';
 
 export const Navbar = () => {
@@ -35,6 +36,7 @@ export const Navbar = () => {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [unreadAlertsCount, setUnreadAlertsCount] = useState(0);
+  const [authOpen, setAuthOpen] = useState(false);
   const menuRef = useRef(null);
   const headerRef = useRef(null);
 
@@ -73,11 +75,18 @@ export const Navbar = () => {
       }
     };
     const handleOpenDrawer = () => setMobileDrawerOpen(true);
+    // The Login page reports whether the auth panel is showing, which is what
+    // decides if the "Back to Home" button belongs in the navbar.
+    const handleAuthView = (e) => {
+      setAuthOpen(Boolean(e.detail && e.detail.open));
+    };
     window.addEventListener('update-unread-alerts', handleUpdateAlerts);
     window.addEventListener('open-mobile-drawer', handleOpenDrawer);
+    window.addEventListener('auth-view-changed', handleAuthView);
     return () => {
       window.removeEventListener('update-unread-alerts', handleUpdateAlerts);
       window.removeEventListener('open-mobile-drawer', handleOpenDrawer);
+      window.removeEventListener('auth-view-changed', handleAuthView);
     };
   }, []);
 
@@ -308,6 +317,16 @@ export const Navbar = () => {
                 <Rocket className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">{t('Get Started', 'ተጀምር')}</span>
               </button>
+              {authOpen && (
+                <button
+                  onClick={() => window.dispatchEvent(new CustomEvent('back-to-home'))}
+                  className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 hover:border-emerald-500/50 text-slate-300 hover:text-emerald-400 text-[10px] sm:text-[11px] font-extrabold transition-all flex items-center gap-1.5 cursor-pointer shadow-md active:scale-95"
+                  title={t('Back to Home', 'ወደ መነሻ ተመለስ')}
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">{t('Back to Home', 'ወደ መነሻ ተመለስ')}</span>
+                </button>
+              )}
               <div className="flex items-center bg-slate-800/80 p-0.5 rounded-xl border border-slate-700/60 shadow-md">
                 <button
                   onClick={() => setLang('EN')}

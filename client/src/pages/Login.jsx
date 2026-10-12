@@ -524,6 +524,19 @@ setError('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // The navbar owns the "Back to Home" button so it sits beside the theme
+  // toggle. It has no access to this component's state, so the two stay in sync
+  // through window events: this one requests the return, and the effect below
+  // tells the navbar whether the auth panel is currently open.
+  useEffect(() => {
+    window.addEventListener('back-to-home', handleBackToHome);
+    return () => window.removeEventListener('back-to-home', handleBackToHome);
+  }, []);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('auth-view-changed', { detail: { open: showAuth } }));
+  }, [showAuth]);
+
   // Once the panel mounts, bring it into view. Depending on showAuth rather than
   // scrolling from the click handler means the panel already exists to scroll to.
   useEffect(() => {
@@ -544,18 +557,6 @@ setError('');
     <div className="login-page flex flex-col items-center py-4 px-4">
 
       <div ref={panelRef} className="w-full max-w-md space-y-3.5 my-auto">
-        {/* Back to the home page from any auth view */}
-        <div>
-          <button
-            type="button"
-            onClick={handleBackToHome}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/80 hover:border-emerald-500/40 text-slate-300 hover:text-emerald-400 text-xs font-bold transition-all cursor-pointer shadow-md"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>{t('Back to Home', 'ወደ መነሻ ተመለስ')}</span>
-          </button>
-        </div>
-
         {/* Header — shown only on the sign-in view, not on register/reset */}
         {authView === 'SIGN_IN' && (
           <div className="text-center space-y-1">
