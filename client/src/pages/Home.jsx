@@ -306,7 +306,7 @@ export const Home = ({ onGetStarted }) => {
                     style={{ objectPosition: item.pos }}
                     className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-500"
                   />
-                  <div className={`absolute inset-0 bg-gradient-to-t ${item.wash} to-transparent`} />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-transparent" />
                   <div className="absolute inset-0 flex flex-col justify-between p-3.5">
                     <div className="flex justify-end">
                       <span className="w-8 h-8 rounded-lg bg-black/40 backdrop-blur-sm border border-white/10 flex items-center justify-center">
