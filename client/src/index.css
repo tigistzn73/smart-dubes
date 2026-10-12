@@ -69,6 +69,70 @@
 }
 
 /* ============================================================
+   Home Page — Theme Tokens
+   The landing page is authored once against these variables, so
+   the same markup renders as the dark Midnight Emerald theme or
+   the bright "Comfortable Light" theme without duplicating it.
+   ============================================================ */
+.home-page {
+  --home-bg: #0B0F19;
+  --home-bg-alt: #0D1220;
+  --home-card: #131A2A;
+  --home-card-soft: #151C2C;
+  --home-border: #1E293B;
+  --home-border-strong: #334155;
+  --home-text: #F8FAFC;
+  --home-soft: #CBD5E1;
+  --home-muted: #94A3B8;
+  --home-faint: #64748B;
+  --home-accent: #34D399;
+  --home-accent2: #FACC15;
+  --home-accent3: #38BDF8;
+}
+
+[data-theme="light"] .home-page {
+  --home-bg: #F8FAFC;
+  --home-bg-alt: #F1F5F9;
+  --home-card: #FFFFFF;
+  --home-card-soft: #FFFFFF;
+  --home-border: #E2E8F0;
+  --home-border-strong: #CBD5E1;
+  --home-text: #0F172A;
+  --home-soft: #334155;
+  --home-muted: #475569;
+  --home-faint: #64748B;
+  --home-accent: #059669;
+  --home-accent2: #B45309;
+  --home-accent3: #0284C7;
+}
+
+/* The hero heading and stat numbers carry a gradient. The bright version uses
+   deeper stops so the yellow does not wash out against the light photo. */
+.home-page .home-heading {
+  background-image: linear-gradient(to right, #34D399, #FACC15, #F59E0B);
+}
+[data-theme="light"] .home-page .home-heading {
+  background-image: linear-gradient(to right, #065F46, #B45309, #92400E);
+}
+
+.home-page .home-stat-value {
+  background-image: linear-gradient(to right, #34D399, #FACC15);
+}
+[data-theme="light"] .home-page .home-stat-value {
+  background-image: linear-gradient(to right, #065F46, #B45309);
+}
+
+/* The scrim over the merchant photo: a dark wash keeps the dark theme legible,
+   while the light theme lays a bright wash so the dark headline stays readable
+   and the photo still reads as a soft backdrop. */
+.home-page .home-hero-scrim {
+  background: linear-gradient(to bottom, rgba(11, 15, 25, 0.85), rgba(11, 15, 25, 0.80), #0B0F19);
+}
+[data-theme="light"] .home-page .home-hero-scrim {
+  background: linear-gradient(to bottom, rgba(248, 250, 252, 0.82), rgba(248, 250, 252, 0.88), #F8FAFC);
+}
+
+/* ============================================================
    Login Page Background
    The merchant artwork sits behind the auth cards in every theme.
    Each theme paints its own scrim over the photo so the form stays

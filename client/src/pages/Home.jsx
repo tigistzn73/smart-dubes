@@ -31,7 +31,7 @@ const FEATURES = [
   {
     icon: NotebookPen,
     accent: 'from-emerald-500/20 to-emerald-500/0 border-emerald-500/30',
-    ring: 'text-emerald-400',
+    ring: 'text-emerald-500',
     title: { en: 'Digital Dube Ledger', am: 'ዲጂታል የዱቤ ሌጀር' },
     body: {
       en: 'Replace fragile paper notebooks with a secure, searchable and cloud-backed credit ledger that never gets lost or altered.',
@@ -40,8 +40,8 @@ const FEATURES = [
   },
   {
     icon: Fingerprint,
-    accent: 'from-yellow-500/20 to-yellow-500/0 border-yellow-500/30',
-    ring: 'text-yellow-400',
+    accent: 'from-amber-500/20 to-amber-500/0 border-amber-500/30',
+    ring: 'text-amber-500',
     title: { en: 'Fayda National ID KYC', am: 'የፋይዳ መታወቂያ ማረጋገጫ' },
     body: {
       en: 'Verify every customer against Ethiopia\u2019s Fayda National ID before you extend any credit, so trust is confirmed not assumed.',
@@ -51,7 +51,7 @@ const FEATURES = [
   {
     icon: ShieldCheck,
     accent: 'from-sky-500/20 to-sky-500/0 border-sky-500/30',
-    ring: 'text-sky-400',
+    ring: 'text-sky-500',
     title: { en: 'Smart Credit Limits', am: 'የዱቤ ጣሪያ ቁጥጥር' },
     body: {
       en: 'Assign per-customer credit limits and live balances that stop debt from growing beyond what a shop can safely carry.',
@@ -60,8 +60,8 @@ const FEATURES = [
   },
   {
     icon: BellRing,
-    accent: 'from-amber-500/20 to-amber-500/0 border-amber-500/30',
-    ring: 'text-amber-400',
+    accent: 'from-orange-500/20 to-orange-500/0 border-orange-500/30',
+    ring: 'text-orange-500',
     title: { en: 'Automated SMS Reminders', am: 'ራስ-ሰር የSMS ማሳሰቢያ' },
     body: {
       en: 'Due-date and overdue reminders reach customers over Twilio or Africa\u2019s Talking long before a debt turns into a problem.',
@@ -71,7 +71,7 @@ const FEATURES = [
   {
     icon: CreditCard,
     accent: 'from-teal-500/20 to-teal-500/0 border-teal-500/30',
-    ring: 'text-teal-400',
+    ring: 'text-teal-500',
     title: { en: 'Multi-Gateway Repayment', am: 'በብዙ መንገድ ክፍያ' },
     body: {
       en: 'Customers settle debt with Telebirr, CBE Birr, Chapa, cash or a receipt upload \u2014 every payment recorded and approved.',
@@ -81,7 +81,7 @@ const FEATURES = [
   {
     icon: Gavel,
     accent: 'from-rose-500/20 to-rose-500/0 border-rose-500/30',
-    ring: 'text-rose-400',
+    ring: 'text-rose-500',
     title: { en: 'Court Letter Escalation', am: 'የፍርድ ቤት ደብዳቤ' },
     body: {
       en: 'A structured escalation ladder sends formal warning and court letters automatically when a debt stays unpaid.',
@@ -139,7 +139,7 @@ const ROLES = [
   {
     icon: Store,
     name: { en: 'Merchants', am: 'ነጋዴዎች' },
-    tag: 'text-emerald-400',
+    tag: 'text-[var(--home-accent)]',
     border: 'border-emerald-500/30',
     points: {
       en: ['Register customers with Fayda ID', 'Log Dube sales in seconds', 'Send reminders & court letters'],
@@ -149,8 +149,8 @@ const ROLES = [
   {
     icon: UserCheck,
     name: { en: 'Customers', am: 'ደንበኞች' },
-    tag: 'text-yellow-400',
-    border: 'border-yellow-500/30',
+    tag: 'text-[var(--home-accent2)]',
+    border: 'border-amber-500/30',
     points: {
       en: ['See your full balance', 'Track every Dube receipt', 'Repay digitally anytime'],
       am: ['ሙሉ ቀሪ ሂሳብዎን ይመልከቱ', 'ደረሰኞችን ይከታተሉ', 'በዲጂታል ይክፈሉ']
@@ -159,7 +159,7 @@ const ROLES = [
   {
     icon: ShieldHalf,
     name: { en: 'Administrators', am: 'አስተዳዳሪዎች' },
-    tag: 'text-sky-400',
+    tag: 'text-[var(--home-accent3)]',
     border: 'border-sky-500/30',
     points: {
       en: ['Approve merchant KYC', 'Monitor payment gateways', 'Read the immutable audit trail'],
@@ -203,7 +203,7 @@ export const Home = ({ onGetStarted }) => {
   };
 
   return (
-    <div className="home-page w-full bg-[#0B0F19] text-[#F8FAFC] flex flex-col overflow-hidden">
+    <div className="home-page w-full bg-[var(--home-bg)] text-[var(--home-text)] flex flex-col overflow-hidden">
       {/* ======================= HERO ======================= */}
       <section className="relative w-full">
         <div className="absolute inset-0 overflow-hidden">
@@ -212,22 +212,22 @@ export const Home = ({ onGetStarted }) => {
             alt="Ethiopian neighborhood shop"
             className="w-full h-full object-cover object-center"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-[#0B0F19]/85 via-[#0B0F19]/80 to-[#0B0F19]" />
+          <div className="home-hero-scrim absolute inset-0" />
         </div>
 
         <div className="relative z-10 max-w-5xl mx-auto px-4 py-16 sm:py-24 text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold mb-5">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[var(--home-accent)] text-[11px] font-bold mb-5">
             <Globe className="w-3.5 h-3.5" />
             {t('Digital Dube for Ethiopian Merchants', 'ለኢትዮጵያ ነጋዴዎች ዲጂታል ዱቤ')}
           </div>
 
-          <h1 className="text-4xl sm:text-6xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-yellow-400 to-amber-500 bg-clip-text text-transparent">
+          <h1 className="home-heading text-4xl sm:text-6xl font-black tracking-tight bg-clip-text text-transparent">
             Smart Dube
           </h1>
-          <p className="mt-3 text-base sm:text-xl font-bold text-[#E2E8F0]">
+          <p className="mt-3 text-base sm:text-xl font-bold text-[var(--home-soft)]">
             {t('Buy Now, Pay Later & Digital Ledger System', 'ዱቤ እና ዲጂታል ሌጀር ስርዓት')}
           </p>
-          <p className="mt-4 max-w-2xl mx-auto text-sm sm:text-base leading-relaxed text-[#94A3B8]">
+          <p className="mt-4 max-w-2xl mx-auto text-sm sm:text-base leading-relaxed text-[var(--home-muted)]">
             {t(
               'Smart Dube turns the trusted neighborhood Dube notebook into a secure digital platform. Verify customers with Fayda ID, set credit limits, log every credit sale, send automatic SMS reminders and collect repayments through Telebirr, CBE Birr and Chapa — all in one place.',
               'ስማርት ዱቤ የአካባቢውን የዱቤ ደብተር ደህንነቱ የተጠበቀ ዲጂታል ስርዓት ይለውጠዋል። ደንበኞችን በፋይዳ ያረጋግጡ፣ ጣሪያ ያስቀምጡ፣ ሽያጭ ይመዝግቡ፣ ማሳሰቢያ ይላኩ እና ክፍያ ይሰብስቡ።'
@@ -245,7 +245,7 @@ export const Home = ({ onGetStarted }) => {
             <a
               href="#home-features"
               onClick={scrollToFeatures}
-              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-[#151C2C] hover:bg-[#1E293B] border border-[#1E293B] hover:border-[#334155] text-[#E2E8F0] font-bold text-sm transition-all flex items-center justify-center gap-2"
+              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-[var(--home-card-soft)] hover:bg-[var(--home-card)] border border-[var(--home-border)] hover:border-[var(--home-border-strong)] text-[var(--home-soft)] font-bold text-sm transition-all flex items-center justify-center gap-2"
             >
               {t('Explore Features', 'ባህሪያትን ይመልከቱ')}
             </a>
@@ -253,8 +253,8 @@ export const Home = ({ onGetStarted }) => {
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-2.5">
             {['Fayda KYC', 'Secured', 'Audit Trail', 'SMS Reminders'].map((chip) => (
-              <span key={chip} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#151C2C]/80 border border-[#1E293B] text-[#CBD5E1] text-[11px] font-semibold">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span key={chip} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--home-card)] border border-[var(--home-border)] text-[var(--home-soft)] text-[11px] font-semibold">
+                <CheckCircle2 className="w-3.5 h-3.5 text-[var(--home-accent)]" />
                 {chip}
               </span>
             ))}
@@ -263,7 +263,7 @@ export const Home = ({ onGetStarted }) => {
       </section>
 
       {/* ======================= STATS ======================= */}
-      <section className="w-full border-y border-[#1E293B] bg-[#0D1220]">
+      <section className="w-full border-y border-[var(--home-border)] bg-[var(--home-bg-alt)]">
         <div className="max-w-5xl mx-auto px-4 py-8 grid grid-cols-2 md:grid-cols-4 gap-5 text-center">
           {[
             { value: '3', label: t('User Roles', 'የተጠቃሚ ሚናዎች') },
@@ -272,8 +272,8 @@ export const Home = ({ onGetStarted }) => {
             { value: '100%', label: t('Digital Audit Trail', 'ዲጂታል ኦዲት') }
           ].map((stat) => (
             <div key={stat.label}>
-              <p className="text-2xl sm:text-3xl font-black bg-gradient-to-r from-emerald-400 to-yellow-400 bg-clip-text text-transparent">{stat.value}</p>
-              <p className="mt-1 text-[11px] sm:text-xs font-semibold text-[#94A3B8] uppercase tracking-wide">{stat.label}</p>
+              <p className="home-stat-value text-2xl sm:text-3xl font-black bg-clip-text text-transparent">{stat.value}</p>
+              <p className="mt-1 text-[11px] sm:text-xs font-semibold text-[var(--home-muted)] uppercase tracking-wide">{stat.label}</p>
             </div>
           ))}
         </div>
@@ -282,10 +282,10 @@ export const Home = ({ onGetStarted }) => {
       {/* ======================= SCROLLING IMAGE SHOWCASE ======================= */}
       <section className="w-full py-12 sm:py-16">
         <div className="max-w-5xl mx-auto px-4 text-center mb-8">
-          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-400">
+          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--home-accent)]">
             {t('One Platform, Every Screen', 'አንድ ስርዓት፣ ለሁሉም')}
           </p>
-          <h2 className="mt-2 text-2xl sm:text-3xl font-extrabold text-[#F8FAFC]">
+          <h2 className="mt-2 text-2xl sm:text-3xl font-extrabold text-[var(--home-text)]">
             {t('Built for merchants, customers and admins', 'ለነጋዴዎች፣ ለደንበኞች እና ለአስተዳዳሪዎች')}
           </h2>
         </div>
@@ -297,7 +297,7 @@ export const Home = ({ onGetStarted }) => {
               return (
                 <article
                   key={`${item.title.en}-${index}`}
-                  className="group relative w-72 shrink-0 rounded-2xl overflow-hidden border border-[#1E293B] hover:border-emerald-500/40 transition-all shadow-lg"
+                  className="group relative w-72 shrink-0 rounded-2xl overflow-hidden border border-[var(--home-border)] hover:border-emerald-500/40 transition-all shadow-lg"
                 >
                   <img
                     src={HERO_IMAGE}
@@ -325,16 +325,16 @@ export const Home = ({ onGetStarted }) => {
       </section>
 
       {/* ======================= FEATURES ======================= */}
-      <section id="home-features" className="w-full border-t border-[#1E293B] bg-[#0D1220] py-14 sm:py-20 scroll-mt-16">
+      <section id="home-features" className="w-full border-t border-[var(--home-border)] bg-[var(--home-bg-alt)] py-14 sm:py-20 scroll-mt-16">
         <div className="max-w-5xl mx-auto px-4">
           <div className="text-center mb-10">
-            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-yellow-400">
+            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--home-accent2)]">
               {t('Everything a Shop Needs', 'ሱቅ የሚፈልገው ሁሉ')}
             </p>
-            <h2 className="mt-2 text-2xl sm:text-3xl font-extrabold text-[#F8FAFC]">
+            <h2 className="mt-2 text-2xl sm:text-3xl font-extrabold text-[var(--home-text)]">
               {t('Six features that modernize Dube', 'ዱቤን ዘመናዊ የሚያደርጉ ስድስት ባህሪያት')}
             </h2>
-            <p className="mt-3 max-w-2xl mx-auto text-sm text-[#94A3B8]">
+            <p className="mt-3 max-w-2xl mx-auto text-sm text-[var(--home-muted)]">
               {t(
                 'From customer verification to final collection, every step of the credit journey is covered and auditable.',
                 'ከደንበኛ ማረጋገጫ እስከ ስብስብ ድረስ ያለው ሂደት ሙሉ በሙሉ ይሸፈናል።'
@@ -348,13 +348,13 @@ export const Home = ({ onGetStarted }) => {
               return (
                 <div
                   key={feature.title.en}
-                  className={`rounded-2xl border bg-gradient-to-br ${feature.accent} bg-[#131A2A] p-5 hover:-translate-y-1 transition-transform duration-300`}
+                  className={`rounded-2xl border bg-gradient-to-br ${feature.accent} bg-[var(--home-card)] p-5 hover:-translate-y-1 transition-transform duration-300`}
                 >
-                  <span className="w-11 h-11 rounded-xl bg-[#0B0F19] border border-[#1E293B] flex items-center justify-center mb-4">
+                  <span className="w-11 h-11 rounded-xl bg-[var(--home-bg-alt)] border border-[var(--home-border)] flex items-center justify-center mb-4">
                     <Icon className={`w-5 h-5 ${feature.ring}`} />
                   </span>
-                  <h3 className="text-base font-extrabold text-[#F8FAFC]">{t(feature.title.en, feature.title.am)}</h3>
-                  <p className="mt-2 text-[13px] leading-relaxed text-[#94A3B8]">{t(feature.body.en, feature.body.am)}</p>
+                  <h3 className="text-base font-extrabold text-[var(--home-text)]">{t(feature.title.en, feature.title.am)}</h3>
+                  <p className="mt-2 text-[13px] leading-relaxed text-[var(--home-muted)]">{t(feature.body.en, feature.body.am)}</p>
                 </div>
               );
             })}
@@ -366,10 +366,10 @@ export const Home = ({ onGetStarted }) => {
       <section className="w-full py-14 sm:py-20">
         <div className="max-w-5xl mx-auto px-4">
           <div className="text-center mb-10">
-            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-400">
+            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--home-accent)]">
               {t('How It Works', 'እንዴት ይሠራል')}
             </p>
-            <h2 className="mt-2 text-2xl sm:text-3xl font-extrabold text-[#F8FAFC]">
+            <h2 className="mt-2 text-2xl sm:text-3xl font-extrabold text-[var(--home-text)]">
               {t('From first Dube to final settlement', 'ከመጀመሪያ ዱቤ እስከ መጨረሻ ክፍያ')}
             </h2>
           </div>
@@ -378,13 +378,13 @@ export const Home = ({ onGetStarted }) => {
             {STEPS.map((step, index) => {
               const Icon = step.icon;
               return (
-                <div key={step.title.en} className="relative rounded-2xl border border-[#1E293B] bg-[#131A2A] p-5">
+                <div key={step.title.en} className="relative rounded-2xl border border-[var(--home-border)] bg-[var(--home-card)] p-5">
                   <span className="absolute -top-3 left-5 w-7 h-7 rounded-full bg-gradient-to-br from-emerald-400 to-yellow-500 text-[#0B0F19] text-xs font-black flex items-center justify-center shadow-lg">
                     {index + 1}
                   </span>
-                  <Icon className="w-6 h-6 text-emerald-400 mt-2 mb-3" />
-                  <h3 className="text-sm font-extrabold text-[#F8FAFC]">{t(step.title.en, step.title.am)}</h3>
-                  <p className="mt-1.5 text-[12px] leading-relaxed text-[#94A3B8]">{t(step.body.en, step.body.am)}</p>
+                  <Icon className="w-6 h-6 text-[var(--home-accent)] mt-2 mb-3" />
+                  <h3 className="text-sm font-extrabold text-[var(--home-text)]">{t(step.title.en, step.title.am)}</h3>
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--home-muted)]">{t(step.body.en, step.body.am)}</p>
                 </div>
               );
             })}
@@ -393,13 +393,13 @@ export const Home = ({ onGetStarted }) => {
       </section>
 
       {/* ======================= ROLES ======================= */}
-      <section className="w-full border-y border-[#1E293B] bg-[#0D1220] py-14 sm:py-20">
+      <section className="w-full border-y border-[var(--home-border)] bg-[var(--home-bg-alt)] py-14 sm:py-20">
         <div className="max-w-5xl mx-auto px-4">
           <div className="text-center mb-10">
-            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-sky-400">
+            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--home-accent3)]">
               {t('Three Roles, One System', 'ሦስት ሚናዎች፣ አንድ ስርዓት')}
             </p>
-            <h2 className="mt-2 text-2xl sm:text-3xl font-extrabold text-[#F8FAFC]">
+            <h2 className="mt-2 text-2xl sm:text-3xl font-extrabold text-[var(--home-text)]">
               {t('A dedicated workspace for everyone', 'ለሁሉም የተዘጋጀ የራሱ የሥራ ቦታ')}
             </h2>
           </div>
@@ -408,14 +408,14 @@ export const Home = ({ onGetStarted }) => {
             {ROLES.map((role) => {
               const Icon = role.icon;
               return (
-                <div key={role.name.en} className={`rounded-2xl border ${role.border} bg-[#131A2A] p-6 flex flex-col`}>
-                  <span className="w-12 h-12 rounded-xl bg-[#0B0F19] border border-[#1E293B] flex items-center justify-center mb-4">
+                <div key={role.name.en} className={`rounded-2xl border ${role.border} bg-[var(--home-card)] p-6 flex flex-col`}>
+                  <span className="w-12 h-12 rounded-xl bg-[var(--home-bg-alt)] border border-[var(--home-border)] flex items-center justify-center mb-4">
                     <Icon className={`w-6 h-6 ${role.tag}`} />
                   </span>
-                  <h3 className="text-lg font-extrabold text-[#F8FAFC]">{t(role.name.en, role.name.am)}</h3>
+                  <h3 className="text-lg font-extrabold text-[var(--home-text)]">{t(role.name.en, role.name.am)}</h3>
                   <ul className="mt-4 space-y-2.5 flex-1">
                     {role.points[lang === 'EN' ? 'en' : 'am'].map((point) => (
-                      <li key={point} className="flex items-start gap-2 text-[13px] text-[#CBD5E1]">
+                      <li key={point} className="flex items-start gap-2 text-[13px] text-[var(--home-soft)]">
                         <CheckCircle2 className={`w-4 h-4 shrink-0 mt-0.5 ${role.tag}`} />
                         <span>{point}</span>
                       </li>
@@ -431,21 +431,21 @@ export const Home = ({ onGetStarted }) => {
       {/* ======================= GATEWAYS ======================= */}
       <section className="w-full py-12">
         <div className="max-w-5xl mx-auto px-4 text-center">
-          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#64748B] mb-5">
+          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--home-faint)] mb-5">
             {t('Repayments accepted through', 'ክፍያ የሚቀበልባቸው')}
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
             {GATEWAYS.map((gateway) => (
               <span
                 key={gateway}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#131A2A] border border-[#1E293B] text-[#E2E8F0] text-xs font-bold"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--home-card)] border border-[var(--home-border)] text-[var(--home-soft)] text-xs font-bold"
               >
-                <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+                <Smartphone className="w-3.5 h-3.5 text-[var(--home-accent)]" />
                 {gateway}
               </span>
             ))}
           </div>
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-5 text-[11px] text-[#64748B] font-semibold">
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-5 text-[11px] text-[var(--home-faint)] font-semibold">
             <span className="inline-flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" />{t('Secured', 'የተጠበቀ')}</span>
             <span className="inline-flex items-center gap-1.5"><BarChart3 className="w-3.5 h-3.5" />{t('Real-time Balances', 'ቀጥታ ቀሪ ሂሳብ')}</span>
             <span className="inline-flex items-center gap-1.5"><AlarmClock className="w-3.5 h-3.5" />{t('Due-date Alerts', 'የቀን ማሳሰቢያ')}</span>
@@ -455,11 +455,11 @@ export const Home = ({ onGetStarted }) => {
 
       {/* ======================= FINAL CTA ======================= */}
       <section className="w-full px-4 pb-16">
-        <div className="max-w-4xl mx-auto rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/15 via-[#131A2A] to-yellow-500/10 p-8 sm:p-12 text-center">
-          <h2 className="text-2xl sm:text-3xl font-black text-[#F8FAFC]">
+        <div className="max-w-4xl mx-auto rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/15 via-[var(--home-card)] to-amber-500/10 p-8 sm:p-12 text-center">
+          <h2 className="text-2xl sm:text-3xl font-black text-[var(--home-text)]">
             {t('Ready to digitize your Dube?', 'ዱቤዎን ዲጂታል ለማድረግ ተዘጋጅተዋል?')}
           </h2>
-          <p className="mt-3 max-w-xl mx-auto text-sm text-[#CBD5E1]">
+          <p className="mt-3 max-w-xl mx-auto text-sm text-[var(--home-soft)]">
             {t(
               'Join the merchants replacing paper ledgers with transparent, secure and mobile-friendly credit management.',
               'ወረቀት ሌጀርን በግልጽ፣ ደህንነቱ የተጠበቀ እና በሞባይል ተግባራዊ በሆነ የዱቤ አስተዳደር ይተኩ።'
@@ -476,15 +476,15 @@ export const Home = ({ onGetStarted }) => {
       </section>
 
       {/* ======================= FOOTER ======================= */}
-      <footer className="w-full border-t border-[#1E293B] bg-[#0D1220]">
+      <footer className="w-full border-t border-[var(--home-border)] bg-[var(--home-bg-alt)]">
         <div className="max-w-5xl mx-auto px-4 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-400 via-yellow-500 to-rose-500 p-0.5 flex items-center justify-center">
-              <span className="w-full h-full bg-[#0B0F19] rounded-[6px] flex items-center justify-center text-[10px] font-black text-yellow-400">ET</span>
+              <span className="w-full h-full bg-[var(--home-bg)] rounded-[6px] flex items-center justify-center text-[10px] font-black text-amber-500">ET</span>
             </div>
-            <span className="text-sm font-extrabold text-[#F8FAFC]">Smart Dube</span>
+            <span className="text-sm font-extrabold text-[var(--home-text)]">Smart Dube</span>
           </div>
-          <p className="text-[11px] text-[#64748B]">
+          <p className="text-[11px] text-[var(--home-faint)]">
             Copyright &copy; 2022 - 2026 All Rights Reserved - Developed By Tigist Zinabu.
           </p>
         </div>
