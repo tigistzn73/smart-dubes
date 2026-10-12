@@ -281,12 +281,12 @@ export const Home = ({ onGetStarted }) => {
       </section>
 
       {/* ======================= SCROLLING IMAGE SHOWCASE ======================= */}
-      <section className="w-full py-12 sm:py-16">
+      <section className="w-full bg-black py-12 sm:py-16">
         <div className="max-w-5xl mx-auto px-4 text-center mb-8">
-          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--home-accent)]">
+          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-400">
             {t('One Platform, Every Screen', 'አንድ ስርዓት፣ ለሁሉም')}
           </p>
-          <h2 className="mt-2 text-2xl sm:text-3xl font-extrabold text-[var(--home-text)]">
+          <h2 className="mt-2 text-2xl sm:text-3xl font-extrabold text-[#FFFFFF]">
             {t('Built for merchants, customers and admins', 'ለነጋዴዎች፣ ለደንበኞች እና ለአስተዳዳሪዎች')}
           </h2>
         </div>
@@ -298,7 +298,7 @@ export const Home = ({ onGetStarted }) => {
               return (
                 <article
                   key={`${item.title.en}-${index}`}
-                  className="group relative w-72 shrink-0 rounded-2xl overflow-hidden border border-[var(--home-border)] hover:border-emerald-500/40 transition-all shadow-lg"
+                  className="group relative w-72 shrink-0 rounded-2xl overflow-hidden border border-white/10 hover:border-emerald-500/40 transition-all shadow-lg"
                 >
                   <img
                     src={SHOWCASE_IMAGE}
