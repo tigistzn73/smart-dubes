@@ -208,10 +208,21 @@ const clientDist = path.join(__dirname, '..', '..', 'client', 'dist');
 const clientIndex = path.join(clientDist, 'index.html');
 
 if (fs.existsSync(clientIndex)) {
-  app.use(express.static(clientDist));
+  // index.html must never be cached: it points at the content-hashed bundle, so
+  // a stale copy keeps serving an old build and makes freshly replaced assets
+  // (images, styles) look like they never changed. The hashed assets themselves
+  // stay cacheable, since a new build gives them a new name.
+  app.use(express.static(clientDist, {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('index.html')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      }
+    }
+  }));
 
   // SPA fallback so deep links like /login or /merchant/dashboard work on refresh
   app.get('*', (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.sendFile(clientIndex);
   });
 } else {
