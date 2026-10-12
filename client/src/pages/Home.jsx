@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 
 const HERO_IMAGE = '/login-bg.png';
+const SHOWCASE_IMAGE = '/showcase.png';
 
 const FEATURES = [
   {
@@ -300,7 +301,7 @@ export const Home = ({ onGetStarted }) => {
                   className="group relative w-72 shrink-0 rounded-2xl overflow-hidden border border-[var(--home-border)] hover:border-emerald-500/40 transition-all shadow-lg"
                 >
                   <img
-                    src={HERO_IMAGE}
+                    src={SHOWCASE_IMAGE}
                     alt={t(item.title.en, item.title.am)}
                     style={{ objectPosition: item.pos }}
                     className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-500"
