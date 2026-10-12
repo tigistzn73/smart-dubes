@@ -513,6 +513,17 @@ setError('');
     setSuccess('');
   };
 
+  // Returns from the auth panels to the marketing home page. The view is reset
+  // so coming back in always starts cleanly at Sign In.
+  const handleBackToHome = () => {
+    setShowAuth(false);
+    setAuthView('SIGN_IN');
+    setError('');
+    setSuccess('');
+    setPassword('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   // Once the panel mounts, bring it into view. Depending on showAuth rather than
   // scrolling from the click handler means the panel already exists to scroll to.
   useEffect(() => {
@@ -533,6 +544,18 @@ setError('');
     <div className="login-page flex flex-col items-center py-4 px-4">
 
       <div ref={panelRef} className="w-full max-w-md space-y-3.5 my-auto">
+        {/* Back to the home page from any auth view */}
+        <div>
+          <button
+            type="button"
+            onClick={handleBackToHome}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/80 hover:border-emerald-500/40 text-slate-300 hover:text-emerald-400 text-xs font-bold transition-all cursor-pointer shadow-md"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>{t('Back to Home', 'ወደ መነሻ ተመለስ')}</span>
+          </button>
+        </div>
+
         {/* Header — shown only on the sign-in view, not on register/reset */}
         {authView === 'SIGN_IN' && (
           <div className="text-center space-y-1">
