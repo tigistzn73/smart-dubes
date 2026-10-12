@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { Home } from './Home';
 import {
   Store,
   UserCheck,
@@ -504,12 +505,28 @@ setError('');
       setPassword('');
     };
 
-  // Guests land here first. Only the background shows until "Get Started" is
-  // pressed; the branding and the sign-in panel appear only on the sign-in page.
+  // Opens the sign-in panel from the home page calls to action.
+  const handleOpenAuth = () => {
+    setShowAuth(true);
+    setAuthView('SIGN_IN');
+    setError('');
+    setSuccess('');
+  };
+
+  // Once the panel mounts, bring it into view. Depending on showAuth rather than
+  // scrolling from the click handler means the panel already exists to scroll to.
+  useEffect(() => {
+    if (!showAuth) return;
+    window.requestAnimationFrame(() => {
+      panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }, [showAuth]);
+
+  // Guests land here first and see the full marketing home page: hero, feature
+  // descriptions and a scrolling showcase. The sign-in panel only replaces it
+  // once "Get Started" is pressed.
   if (!showAuth) {
-    return (
-      <div className="login-page flex flex-col items-center justify-center py-10 px-4" />
-    );
+    return <Home onGetStarted={handleOpenAuth} />;
   }
 
   return (

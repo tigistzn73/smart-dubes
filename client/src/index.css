@@ -34,6 +34,41 @@
 }
 
 /* ============================================================
+   Home Page — Scrolling Image Showcase
+   The showcase strip scrolls its cards horizontally so every
+   demo screen is reachable without a manual carousel. The list
+   is rendered twice, so translating by half its width loops
+   seamlessly. Hovering pauses it so a card can be read.
+   ============================================================ */
+.home-marquee-mask {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+}
+
+.home-marquee {
+  animation: home-marquee 48s linear infinite;
+  will-change: transform;
+}
+
+.home-marquee:hover {
+  animation-play-state: paused;
+}
+
+@keyframes home-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-marquee {
+    animation: none;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
+  }
+}
+
+/* ============================================================
    Login Page Background
    The merchant artwork sits behind the auth cards in every theme.
    Each theme paints its own scrim over the photo so the form stays
