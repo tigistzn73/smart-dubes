@@ -211,7 +211,7 @@ export const Home = ({ onGetStarted }) => {
           <img
             src={HERO_IMAGE}
             alt="Ethiopian neighborhood shop"
-            className="w-full h-full object-cover object-center"
+            className="w-full h-full object-cover object-top sm:object-center"
           />
           <div className="home-hero-scrim absolute inset-0" />
         </div>
