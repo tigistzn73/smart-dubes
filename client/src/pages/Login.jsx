@@ -564,7 +564,7 @@ setError('');
         <div className="split-left w-1/2 h-full bg-[var(--home-bg)] relative hidden lg:block">
           <div className="absolute inset-0 overflow-hidden">
             <img
-              src="/home-hero.png"
+              src="/home-showcase.png"
               alt="Ethiopian neighborhood shop"
               className="w-full h-full object-cover object-left"
             />
