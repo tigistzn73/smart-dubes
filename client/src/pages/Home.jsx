@@ -206,7 +206,7 @@ export const Home = ({ onGetStarted }) => {
   return (
     <div className="home-page w-full bg-[var(--home-bg)] text-[var(--home-text)] flex flex-col overflow-hidden">
       {/* ======================= HERO ======================= */}
-      <section className="relative w-full">
+      <section className="relative w-full min-h-[70vh] sm:min-h-[80vh]">
         <div className="absolute inset-0 overflow-hidden">
           <img
             src={HERO_IMAGE}
