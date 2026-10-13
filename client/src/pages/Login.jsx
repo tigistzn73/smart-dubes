@@ -556,7 +556,10 @@ setError('');
   return (
     <div className="login-page flex flex-col items-center py-4 px-4">
 
-      <div ref={panelRef} className="w-full max-w-md space-y-3.5 my-auto">
+      <div className="split-screen min-h-screen flex overflow-hidden">
+        {/* Left side: login form */}
+        <div className="split-left w-1/2 flex flex-col items-center py-4 px-4">
+          <div ref={panelRef} className="w-full max-w-md space-y-3.5 my-auto">
         {/* Header — shown only on the sign-in view, not on register/reset */}
         {authView === 'SIGN_IN' && (
           <div className="text-center space-y-1">
@@ -1193,6 +1196,20 @@ setError('');
         {/* Footer */}
         <div className="login-footer text-center text-xs text-slate-500 pt-6">
           Copyright &copy; 2022 - 2026 All Rights Reserved - Developed By Tigist Zinabu.
+        </div>
+      </div>
+      </div>
+
+        {/* Right side: hero image section */}
+        <div className="split-right w-1/2 bg-[var(--home-bg)] relative hidden lg:block">
+          <div className="absolute inset-0 overflow-hidden">
+            <img
+              src="/home-hero.png"
+              alt="Ethiopian neighborhood shop"
+              className="w-full h-full object-cover object-right"
+            />
+            <div className="home-hero-scrim absolute inset-0" />
+          </div>
         </div>
       </div>
     </div>
