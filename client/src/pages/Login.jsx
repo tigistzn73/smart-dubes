@@ -141,7 +141,7 @@ function isValidResetIdentifier(value) {
 
 export const Login = () => {
   const { loginWithToken, switchDemoRole, register, forgotPassword, resetPassword } = useAuth();
-  const { lang, setLang } = useTheme();
+  const { lang, setLang, activeTheme } = useTheme();
   const t = (en, am) => (lang === 'EN' ? en : am);
 
   // Points at the auth panel so the navbar's "Get Started" button can scroll
@@ -554,11 +554,26 @@ setError('');
   }
 
   return (
-    <div className="login-page flex flex-col items-center py-4 px-4">
+    <div
+      className={`login-page h-[calc(100vh-var(--nav-h,52px))] w-full overflow-hidden ${activeTheme.bgClass}`}
+      style={{ backgroundImage: 'none' }}
+    >
 
-      <div className="split-screen min-h-screen flex overflow-hidden">
-        {/* Left side: login form */}
-        <div className="split-left w-1/2 flex flex-col items-center py-4 px-4">
+      <div className="split-screen h-full w-full flex overflow-hidden">
+        {/* Left side: hero image section */}
+        <div className="split-left w-1/2 h-full bg-[var(--home-bg)] relative hidden lg:block">
+          <div className="absolute inset-0 overflow-hidden">
+            <img
+              src="/home-hero.png"
+              alt="Ethiopian neighborhood shop"
+              className="w-full h-full object-cover object-left"
+            />
+            <div className="home-hero-scrim absolute inset-0" />
+          </div>
+        </div>
+
+        {/* Right side: login form */}
+        <div className="split-right w-full lg:w-1/2 h-full flex flex-col items-center py-4 px-4 overflow-y-auto">
           <div ref={panelRef} className="w-full max-w-md space-y-3.5 my-auto">
         {/* Header — shown only on the sign-in view, not on register/reset */}
         {authView === 'SIGN_IN' && (
@@ -1198,18 +1213,6 @@ setError('');
           Copyright &copy; 2022 - 2026 All Rights Reserved - Developed By Tigist Zinabu.
         </div>
       </div>
-      </div>
-
-        {/* Right side: hero image section */}
-        <div className="split-right w-1/2 bg-[var(--home-bg)] relative hidden lg:block">
-          <div className="absolute inset-0 overflow-hidden">
-            <img
-              src="/home-hero.png"
-              alt="Ethiopian neighborhood shop"
-              className="w-full h-full object-cover object-right"
-            />
-            <div className="home-hero-scrim absolute inset-0" />
-          </div>
         </div>
       </div>
     </div>
