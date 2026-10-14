@@ -522,15 +522,6 @@ export const Home = ({ onGetStarted }) => {
               alt={activeTheme.id === 'light' ? 'Smart Dube Bright Theme Banner' : 'Smart Dube Dark Theme Banner'}
               className="w-full h-auto object-cover"
             />
-            <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 via-black/20 to-transparent">
-              <button
-                onClick={handleBannerClose}
-                className="w-full px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:via-teal-400 hover:to-emerald-500 text-white font-extrabold text-sm shadow-lg shadow-emerald-500/30 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
-              >
-                <span>{t('Continue to Sign Up', 'ወደ መመዝገብ ይቀጡ')}</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
           </div>
         </div>
       )}
