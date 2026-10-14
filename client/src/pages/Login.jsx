@@ -20,8 +20,12 @@ import {
   ArrowLeft,
   Eye,
   EyeOff,
-  Upload
+  Upload,
+  X
 } from 'lucide-react';
+
+const DARK_BANNER = '/dark-banner.png';
+const BRIGHT_BANNER = '/bright-banner.png';
 
 // Remembering the phone number is opt-in, and the password is never stored.
 //
@@ -155,6 +159,10 @@ export const Login = () => {
   // get the sign-in/register forms once they click "Get Started", so the login
   // page is never shown before the visitor asks for it.
   const [showAuth, setShowAuth] = useState(false);
+
+  // Banner modal state for split screen
+  const [showBanner, setShowBanner] = useState(false);
+  const bannerImage = activeTheme.id === 'light' ? BRIGHT_BANNER : DARK_BANNER;
 
   // Sign In State
   // Prefilled from the last successful sign-in. The password starts empty and is
@@ -513,6 +521,15 @@ setError('');
     setSuccess('');
   };
 
+  // Banner modal handlers for split screen
+  const handleOpenBanner = () => {
+    setShowBanner(true);
+  };
+
+  const handleCloseBanner = () => {
+    setShowBanner(false);
+  };
+
   // Returns from the auth panels to the marketing home page. The view is reset
   // so coming back in always starts cleanly at Sign In.
   const handleBackToHome = () => {
@@ -561,14 +578,20 @@ setError('');
 
       <div className="split-screen h-full w-full flex overflow-hidden">
         {/* Left side: hero image section */}
-        <div className="split-left w-1/2 h-full bg-[var(--home-bg)] relative hidden lg:block">
+        <div className="split-left w-1/2 h-full bg-[var(--home-bg)] relative hidden lg:block cursor-pointer" onClick={handleOpenBanner}>
           <div className="absolute inset-0 overflow-hidden">
             <img
-              src="/home-showcase.png"
-              alt="Ethiopian neighborhood shop"
-              className="w-full h-full object-cover object-left"
+              src={bannerImage}
+              alt={activeTheme.id === 'light' ? 'Smart Dube Bright Theme Banner' : 'Smart Dube Dark Theme Banner'}
+              className="w-full h-full object-cover object-center"
             />
             <div className="home-hero-scrim absolute inset-0" />
+            <div className="absolute bottom-6 left-6 right-6 text-center">
+              <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-black/60 backdrop-blur-sm text-white text-sm font-semibold border border-white/10">
+                <span>Click to view</span>
+                <ArrowRight className="w-4 h-4" />
+              </span>
+            </div>
           </div>
         </div>
 
@@ -1213,8 +1236,37 @@ setError('');
           Copyright &copy; 2022 - 2026 All Rights Reserved - Developed By Tigist Zinabu.
         </div>
       </div>
+    </div>
+  </div>
+
+    {/* ======================= BANNER MODAL ======================= */}
+    {showBanner && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={handleCloseBanner}>
+        <div className="relative w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl shadow-2xl bg-white" onClick={e => e.stopPropagation()}>
+          <button
+            onClick={handleCloseBanner}
+            className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white flex items-center justify-center transition-colors"
+            aria-label="Close banner"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <img
+            src={bannerImage}
+            alt={activeTheme.id === 'light' ? 'Smart Dube Bright Theme Banner' : 'Smart Dube Dark Theme Banner'}
+            className="w-full h-auto object-cover"
+          />
+          <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 via-black/20 to-transparent">
+            <button
+              onClick={handleCloseBanner}
+              className="w-full px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:via-teal-400 hover:to-emerald-500 text-white font-extrabold text-sm shadow-lg shadow-emerald-500/30 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
+            >
+              <span>{t('Continue to Sign Up', 'ወደ መመዝገብ ይቀጡ')}</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    )}
+</div>
   );
 };
