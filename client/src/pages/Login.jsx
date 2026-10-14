@@ -521,11 +521,6 @@ setError('');
     setSuccess('');
   };
 
-  // Banner modal handlers for split screen
-  const handleOpenBanner = () => {
-    setShowBanner(true);
-  };
-
   const handleCloseBanner = () => {
     setShowBanner(false);
   };
@@ -578,21 +573,8 @@ setError('');
 
       <div className="split-screen h-full w-full flex overflow-hidden">
         {/* Left side: hero image section */}
-        <div className="split-left w-1/2 h-full bg-[var(--home-bg)] relative hidden lg:block cursor-pointer" onClick={handleOpenBanner}>
-          <div className="absolute inset-0 overflow-hidden">
-            <img
-              src={bannerImage}
-              alt={activeTheme.id === 'light' ? 'Smart Dube Bright Theme Banner' : 'Smart Dube Dark Theme Banner'}
-              className="w-full h-full object-cover object-center"
-            />
-            <div className="home-hero-scrim absolute inset-0" />
-            <div className="absolute bottom-6 left-6 right-6 text-center">
-              <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-black/60 backdrop-blur-sm text-white text-sm font-semibold border border-white/10">
-                <span>Click to view</span>
-                <ArrowRight className="w-4 h-4" />
-              </span>
-            </div>
-          </div>
+        <div className="split-left w-1/2 h-full bg-[var(--home-bg)] relative hidden lg:block">
+          <div className="home-hero-scrim absolute inset-0" />
         </div>
 
         {/* Right side: login form */}
