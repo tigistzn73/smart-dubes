@@ -574,6 +574,13 @@ setError('');
       <div className="split-screen h-full w-full flex overflow-hidden">
         {/* Left side: hero image section */}
         <div className="split-left w-1/2 h-full bg-[var(--home-bg)] relative hidden lg:block">
+          <div className="absolute inset-0 overflow-hidden">
+            <img
+              src={bannerImage}
+              alt={activeTheme.id === 'light' ? 'Smart Dube Bright Theme Banner' : 'Smart Dube Dark Theme Banner'}
+              className="w-full h-full object-cover object-center"
+            />
+          </div>
           <div className="home-hero-scrim absolute inset-0" />
         </div>
 
