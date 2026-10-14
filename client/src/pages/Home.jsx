@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import {
   NotebookPen,
@@ -22,11 +22,14 @@ import {
   Smartphone,
   Banknote,
   ScanLine,
-  TrendingUp
+  TrendingUp,
+  X
 } from 'lucide-react';
 
 const HERO_IMAGE = '/home-hero.png';
 const SHOWCASE_IMAGE = '/home-showcase.png';
+const DARK_BANNER = '/dark-banner.png';
+const BRIGHT_BANNER = '/bright-banner.png';
 
 const FEATURES = [
   {
@@ -195,13 +198,25 @@ const STEPS = [
 const GATEWAYS = ['Telebirr', 'CBE Birr', 'Chapa', 'Cash', 'Receipt Upload'];
 
 export const Home = ({ onGetStarted }) => {
-  const { lang } = useTheme();
+  const { lang, activeTheme } = useTheme();
   const t = (en, am) => (lang === 'EN' ? en : am);
+  const [showBanner, setShowBanner] = useState(false);
 
   const scrollToFeatures = (e) => {
     e.preventDefault();
     document.getElementById('home-features')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
+
+  const handleGetStarted = () => {
+    setShowBanner(true);
+  };
+
+  const handleBannerClose = () => {
+    setShowBanner(false);
+    onGetStarted();
+  };
+
+  const bannerImage = activeTheme.id === 'light' ? BRIGHT_BANNER : DARK_BANNER;
 
   return (
     <div className="home-page w-full bg-[var(--home-bg)] text-[var(--home-text)] flex flex-col overflow-hidden">
@@ -237,7 +252,7 @@ export const Home = ({ onGetStarted }) => {
 
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
             <button
-              onClick={onGetStarted}
+              onClick={handleGetStarted}
               className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:via-teal-400 hover:to-emerald-500 text-white font-extrabold text-sm shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-[1.03] active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <span>{t('Get Started Free', 'ነጻ ይጀምሩ')}</span>
@@ -467,7 +482,7 @@ export const Home = ({ onGetStarted }) => {
             )}
           </p>
           <button
-            onClick={onGetStarted}
+            onClick={handleGetStarted}
             className="mt-6 px-8 py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:via-teal-400 hover:to-emerald-500 text-white font-extrabold text-sm shadow-lg shadow-emerald-500/30 hover:scale-[1.03] active:scale-95 transition-all inline-flex items-center gap-2 cursor-pointer"
           >
             <span>{t('Create Your Account', 'መለያ ይክፈቱ')}</span>
@@ -490,6 +505,35 @@ export const Home = ({ onGetStarted }) => {
           </p>
         </div>
       </footer>
+
+      {/* ======================= BANNER MODAL ======================= */}
+      {showBanner && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={handleBannerClose}>
+          <div className="relative w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl shadow-2xl bg-white" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={handleBannerClose}
+              className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white flex items-center justify-center transition-colors"
+              aria-label="Close banner"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <img
+              src={bannerImage}
+              alt={activeTheme.id === 'light' ? 'Smart Dube Bright Theme Banner' : 'Smart Dube Dark Theme Banner'}
+              className="w-full h-auto object-cover"
+            />
+            <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 via-black/20 to-transparent">
+              <button
+                onClick={handleBannerClose}
+                className="w-full px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:via-teal-400 hover:to-emerald-500 text-white font-extrabold text-sm shadow-lg shadow-emerald-500/30 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
+              >
+                <span>{t('Continue to Sign Up', 'ወደ መመዝገብ ይቀጡ')}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
