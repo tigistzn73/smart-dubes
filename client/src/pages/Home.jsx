@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import {
   NotebookPen,
@@ -22,14 +22,11 @@ import {
   Smartphone,
   Banknote,
   ScanLine,
-  TrendingUp,
-  X
+  TrendingUp
 } from 'lucide-react';
 
 const HERO_IMAGE = '/home-hero.png';
 const SHOWCASE_IMAGE = '/home-showcase.png';
-const DARK_BANNER = '/dark-banner.png';
-const BRIGHT_BANNER = '/bright-banner.png';
 
 const FEATURES = [
   {
@@ -200,23 +197,14 @@ const GATEWAYS = ['Telebirr', 'CBE Birr', 'Chapa', 'Cash', 'Receipt Upload'];
 export const Home = ({ onGetStarted }) => {
   const { lang, activeTheme } = useTheme();
   const t = (en, am) => (lang === 'EN' ? en : am);
-  const [showBanner, setShowBanner] = useState(false);
-
   const scrollToFeatures = (e) => {
     e.preventDefault();
     document.getElementById('home-features')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const handleGetStarted = () => {
-    setShowBanner(true);
-  };
-
-  const handleBannerClose = () => {
-    setShowBanner(false);
     onGetStarted();
   };
-
-  const bannerImage = activeTheme.id === 'light' ? BRIGHT_BANNER : DARK_BANNER;
 
   return (
     <div className="home-page w-full bg-[var(--home-bg)] text-[var(--home-text)] flex flex-col overflow-hidden">
@@ -505,28 +493,7 @@ export const Home = ({ onGetStarted }) => {
           </p>
         </div>
       </footer>
-
-      {/* ======================= BANNER MODAL ======================= */}
-      {showBanner && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={handleBannerClose}>
-          <div className="relative w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl shadow-2xl bg-white" onClick={e => e.stopPropagation()}>
-            <button
-              onClick={handleBannerClose}
-              className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white flex items-center justify-center transition-colors"
-              aria-label="Close banner"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <img
-              src={bannerImage}
-              alt={activeTheme.id === 'light' ? 'Smart Dube Bright Theme Banner' : 'Smart Dube Dark Theme Banner'}
-              className="w-full h-auto object-cover"
-            />
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
+      );
+    };
 
 export default Home;
