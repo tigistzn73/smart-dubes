@@ -20,12 +20,8 @@ import {
   ArrowLeft,
   Eye,
   EyeOff,
-  Upload,
-  X
+  Upload
 } from 'lucide-react';
-
-const DARK_BANNER = '/dark-banner.png';
-const BRIGHT_BANNER = '/bright-banner.png';
 
 // Remembering the phone number is opt-in, and the password is never stored.
 //
@@ -159,10 +155,6 @@ export const Login = () => {
   // get the sign-in/register forms once they click "Get Started", so the login
   // page is never shown before the visitor asks for it.
   const [showAuth, setShowAuth] = useState(false);
-
-  // Banner modal state for split screen
-  const [showBanner, setShowBanner] = useState(false);
-  const bannerImage = activeTheme.id === 'light' ? BRIGHT_BANNER : DARK_BANNER;
 
   // Sign In State
   // Prefilled from the last successful sign-in. The password starts empty and is
@@ -521,10 +513,6 @@ setError('');
     setSuccess('');
   };
 
-  const handleCloseBanner = () => {
-    setShowBanner(false);
-  };
-
   // Returns from the auth panels to the marketing home page. The view is reset
   // so coming back in always starts cleanly at Sign In.
   const handleBackToHome = () => {
@@ -572,20 +560,8 @@ setError('');
     >
 
       <div className="split-screen h-full w-full flex overflow-hidden">
-        {/* Left side: hero image section */}
-        <div className="split-left w-1/2 h-full bg-[var(--home-bg)] relative hidden lg:block">
-          <div className="absolute inset-0 overflow-hidden">
-            <img
-              src={bannerImage}
-              alt={activeTheme.id === 'light' ? 'Smart Dube Bright Theme Banner' : 'Smart Dube Dark Theme Banner'}
-              className="w-full h-full object-cover object-center"
-            />
-          </div>
-          <div className="home-hero-scrim absolute inset-0" />
-        </div>
-
         {/* Right side: login form */}
-        <div className="split-right w-full lg:w-1/2 h-full flex flex-col items-center py-4 px-4 overflow-y-auto">
+        <div className="split-right w-full h-full flex flex-col items-center py-4 px-4 overflow-y-auto">
           <div ref={panelRef} className="w-full max-w-md space-y-3.5 my-auto">
         {/* Header — shown only on the sign-in view, not on register/reset */}
         {authView === 'SIGN_IN' && (
@@ -1224,29 +1200,8 @@ setError('');
         <div className="login-footer text-center text-xs text-slate-500 pt-6">
           Copyright &copy; 2022 - 2026 All Rights Reserved - Developed By Tigist Zinabu.
         </div>
-      </div>
-    </div>
+</div>
   </div>
-
-    {/* ======================= BANNER MODAL ======================= */}
-    {showBanner && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={handleCloseBanner}>
-        <div className="relative w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl shadow-2xl bg-white" onClick={e => e.stopPropagation()}>
-          <button
-            onClick={handleCloseBanner}
-            className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white flex items-center justify-center transition-colors"
-            aria-label="Close banner"
-          >
-            <X className="w-5 h-5" />
-          </button>
-          <img
-            src={bannerImage}
-            alt={activeTheme.id === 'light' ? 'Smart Dube Bright Theme Banner' : 'Smart Dube Dark Theme Banner'}
-            className="w-full h-auto object-cover"
-          />
-        </div>
-      </div>
-    )}
 </div>
   );
 };
