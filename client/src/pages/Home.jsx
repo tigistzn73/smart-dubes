@@ -242,7 +242,7 @@ export const Home = ({ onGetStarted }) => {
               onClick={handleGetStarted}
               className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:via-teal-400 hover:to-emerald-500 text-white font-extrabold text-sm shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-[1.03] active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap flex-shrink-0"
             >
-              <span>{t('Get Started Free', 'ነጻ ይጀምሩ')}</span>
+              <span>{t('Get Started', 'ይጀምሩ')}</span>
             </button>
             <a
               href="#home-features"
