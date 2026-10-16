@@ -564,7 +564,7 @@ setError('');
         <div className="split-left w-1/2 h-full bg-[var(--home-bg)] relative hidden lg:block">
           <div className="absolute inset-0 overflow-hidden">
             <img
-              src="/split-screen.png"
+              src={activeTheme.id === 'light' ? '/split-screen.png' : '/split-screen-dark.png'}
               alt="Smart Dube digital ledger"
               className="w-full h-full object-cover object-center"
             />

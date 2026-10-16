@@ -154,7 +154,7 @@
   min-height: calc(100vh - var(--nav-h, 52px));
   background-image:
     linear-gradient(rgba(11, 15, 25, 0.72), rgba(11, 15, 25, 0.72)),
-    url('/split-screen.png');
+    url('/split-screen-dark.png');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
