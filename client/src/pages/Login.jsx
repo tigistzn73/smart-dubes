@@ -1200,8 +1200,9 @@ setError('');
         <div className="login-footer text-center text-xs text-slate-500 pt-6">
           Copyright &copy; 2022 - 2026 All Rights Reserved - Developed By Tigist Zinabu.
         </div>
-</div>
-  </div>
-</div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };

@@ -489,7 +489,8 @@ export const Home = ({ onGetStarted }) => {
           </p>
         </div>
       </footer>
-      );
-    };
+    </div>
+  );
+};
 
 export default Home;
