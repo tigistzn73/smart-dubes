@@ -560,8 +560,20 @@ setError('');
     >
 
       <div className="split-screen h-full w-full flex overflow-hidden">
+        {/* Left side: hero image section */}
+        <div className="split-left w-1/2 h-full bg-[var(--home-bg)] relative hidden lg:block">
+          <div className="absolute inset-0 overflow-hidden">
+            <img
+              src="/home-hero.png"
+              alt="Ethiopian neighborhood shop"
+              className="w-full h-full object-cover object-left"
+            />
+            <div className="home-hero-scrim absolute inset-0" />
+          </div>
+        </div>
+
         {/* Right side: login form */}
-        <div className="split-right w-full h-full flex flex-col items-center py-4 px-4 overflow-y-auto">
+        <div className="split-right w-full lg:w-1/2 h-full flex flex-col items-center py-4 px-4 overflow-y-auto">
           <div ref={panelRef} className="w-full max-w-md space-y-3.5 my-auto">
         {/* Header — shown only on the sign-in view, not on register/reset */}
         {authView === 'SIGN_IN' && (

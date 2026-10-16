@@ -25,6 +25,9 @@ import {
   TrendingUp
 } from 'lucide-react';
 
+const HERO_IMAGE = '/home-hero.png';
+const SHOWCASE_IMAGE = '/home-showcase.png';
+
 const FEATURES = [
   {
     icon: NotebookPen,
@@ -206,8 +209,15 @@ export const Home = ({ onGetStarted }) => {
   return (
     <div className="home-page w-full bg-[var(--home-bg)] text-[var(--home-text)] flex flex-col overflow-hidden">
       {/* ======================= HERO ======================= */}
-      <section className="relative w-full aspect-[16/9] sm:aspect-[21/9] min-h-[50vh] max-h-[80vh] bg-gradient-to-br from-emerald-900/30 via-[var(--home-bg)] to-amber-900/20">
-        <div className="home-hero-scrim absolute inset-0" />
+      <section className="relative w-full aspect-[16/9] sm:aspect-[21/9] min-h-[50vh] max-h-[80vh]">
+        <div className="absolute inset-0 overflow-hidden">
+          <img
+            src={HERO_IMAGE}
+            alt="Ethiopian neighborhood shop"
+            className="w-full h-full object-cover object-top sm:object-center"
+          />
+          <div className="home-hero-scrim absolute inset-0" />
+        </div>
 
         <div className="relative z-10 max-w-5xl mx-auto px-4 py-16 sm:py-24 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[var(--home-accent)] text-[11px] font-bold mb-5">
@@ -288,22 +298,16 @@ export const Home = ({ onGetStarted }) => {
           <div className="home-marquee flex gap-5 w-max pb-2">
             {[...SHOWCASE, ...SHOWCASE].map((item, index) => {
               const Icon = item.icon;
-              const colors = [
-                'from-emerald-900/60 via-emerald-950/70',
-                'from-sky-900/60 via-sky-950/70',
-                'from-yellow-900/60 via-amber-950/70',
-                'from-teal-900/60 via-teal-950/70',
-                'from-amber-900/60 via-orange-950/70',
-                'from-rose-900/60 via-rose-950/70'
-              ];
               return (
                 <article
                   key={`${item.title.en}-${index}`}
                   className="group relative w-72 shrink-0 rounded-2xl overflow-hidden border border-[var(--home-showcase-border)] hover:border-emerald-500/40 transition-all shadow-lg"
                 >
-                  <div
-                    style={{ background: `linear-gradient(to bottom right, ${colors[index % colors.length]})` }}
-                    className="w-full h-44 group-hover:scale-105 transition-transform duration-500"
+                  <img
+                    src={SHOWCASE_IMAGE}
+                    alt={t(item.title.en, item.title.am)}
+                    style={{ objectPosition: item.pos }}
+                    className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-transparent" />
                   <div className="absolute inset-0 flex flex-col justify-between p-3.5">

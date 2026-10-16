@@ -142,20 +142,30 @@
     linear-gradient(to bottom, rgba(248, 250, 252, 0.3) 0%, rgba(248, 250, 252, 0.45) 55%, rgba(248, 250, 252, 0.7) 100%);
 }
 
-/* Login Page Background - solid color with gradient */
+/* ============================================================
+   Login Page Background
+   The merchant artwork sits behind the auth cards in every theme.
+   Each theme paints its own scrim over the photo so the form stays
+   readable while the image still shows through: a light wash in the
+   bright theme, a dark wash in the dark themes.
+   ============================================================ */
 .login-page {
   position: relative;
   min-height: calc(100vh - var(--nav-h, 52px));
-  background:
-    radial-gradient(ellipse at center, rgba(11, 15, 25, 0.2) 0%, rgba(11, 15, 25, 0.4) 100%),
-    linear-gradient(to bottom, rgba(11, 15, 25, 0.25) 0%, rgba(11, 15, 25, 0.35) 55%, rgba(11, 15, 25, 0.6) 100%);
+  background-image:
+    linear-gradient(rgba(11, 15, 25, 0.72), rgba(11, 15, 25, 0.72)),
+    url('/home-hero.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
   transition: background-color 0.4s ease;
 }
 
 [data-theme="light"] .login-page {
-  background:
-    radial-gradient(ellipse at center, rgba(248, 250, 252, 0.25) 0%, rgba(248, 250, 252, 0.45) 100%),
-    linear-gradient(to bottom, rgba(248, 250, 252, 0.3) 0%, rgba(248, 250, 252, 0.45) 55%, rgba(248, 250, 252, 0.7) 100%);
+  background-image:
+    linear-gradient(rgba(248, 250, 252, 0.55), rgba(248, 250, 252, 0.55)),
+    url('/home-hero.png');
 }
 
 /* The artwork stays visible in the bright theme, but the three bits of text
