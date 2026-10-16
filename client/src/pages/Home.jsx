@@ -234,17 +234,17 @@ export const Home = ({ onGetStarted }) => {
             )}
           </p>
 
-          <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+          <div className="mt-8 flex flex-col sm:flex-row sm:flex-nowrap items-center justify-center gap-3">
             <button
               onClick={handleGetStarted}
-              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:via-teal-400 hover:to-emerald-500 text-white font-extrabold text-sm shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-[1.03] active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:via-teal-400 hover:to-emerald-500 text-white font-extrabold text-sm shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-[1.03] active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
             >
               <span>{t('Get Started Free', 'ነጻ ይጀምሩ')}</span>
             </button>
             <a
               href="#home-features"
               onClick={scrollToFeatures}
-              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-[var(--home-card-soft)] hover:bg-[var(--home-card)] border border-[var(--home-border)] hover:border-[var(--home-border-strong)] text-[var(--home-soft)] font-bold text-sm transition-all flex items-center justify-center gap-2"
+              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-[var(--home-card-soft)] hover:bg-[var(--home-card)] border border-[var(--home-border)] hover:border-[var(--home-border-strong)] text-[var(--home-soft)] font-bold text-sm transition-all flex items-center justify-center gap-2 whitespace-nowrap"
             >
               {t('Explore Features', 'ባህሪያትን ይመልከቱ')}
             </a>
