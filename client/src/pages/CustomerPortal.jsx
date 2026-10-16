@@ -2058,20 +2058,22 @@ export const CustomerPortal = () => {
                 </button>
               ) : (
                 <>
-                  <button
-                    onClick={() => {
-                      const tx = transactions.find(t => t.id === openCourtLetter.transaction_id);
-                      setOpenCourtLetter(null);
-                      if (tx) {
-                        setSelectedTxForPayment(tx);
-                      } else {
-                        setActiveTab('TRANSACTIONS');
-                      }
-                    }}
-                    className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold transition-colors cursor-pointer"
-                  >
-                    {t('Pay This Debt Now', 'አሁኑ ይክፈሉ')}
-                  </button>
+                  {!openCourtLetter.notified_by_sms && (
+                    <button
+                      onClick={() => {
+                        const tx = transactions.find(t => t.id === openCourtLetter.transaction_id);
+                        setOpenCourtLetter(null);
+                        if (tx) {
+                          setSelectedTxForPayment(tx);
+                        } else {
+                          setActiveTab('TRANSACTIONS');
+                        }
+                      }}
+                      className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold transition-colors cursor-pointer"
+                    >
+                      {t('Pay This Debt Now', 'አሁኑ ይክፈሉ')}
+                    </button>
+                  )}
                   {!openCourtLetter.is_acknowledged && (
                     <button
                       onClick={() => handleAcknowledgeCourtLetter(openCourtLetter)}
