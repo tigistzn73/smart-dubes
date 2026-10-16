@@ -25,9 +25,6 @@ import {
   TrendingUp
 } from 'lucide-react';
 
-const HERO_IMAGE = '/home-hero.png';
-const SHOWCASE_IMAGE = '/home-showcase.png';
-
 const FEATURES = [
   {
     icon: NotebookPen,
@@ -221,7 +218,6 @@ export const Home = ({ onGetStarted }) => {
 
         <div className="relative z-10 max-w-5xl mx-auto px-4 py-16 sm:py-24 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[var(--home-accent)] text-[11px] font-bold mb-5">
-            <Globe className="w-3.5 h-3.5" />
             {t('Digital Dube for Ethiopian Merchants', 'ለኢትዮጵያ ነጋዴዎች ዲጂታል ዱቤ')}
           </div>
 
@@ -244,7 +240,6 @@ export const Home = ({ onGetStarted }) => {
               className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:via-teal-400 hover:to-emerald-500 text-white font-extrabold text-sm shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-[1.03] active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <span>{t('Get Started Free', 'ነጻ ይጀምሩ')}</span>
-              <ArrowRight className="w-4 h-4" />
             </button>
             <a
               href="#home-features"
@@ -258,7 +253,6 @@ export const Home = ({ onGetStarted }) => {
           <div className="mt-8 flex flex-wrap items-center justify-center gap-2.5">
             {['Fayda KYC', 'Secured', 'Audit Trail', 'SMS Reminders'].map((chip) => (
               <span key={chip} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--home-card)] border border-[var(--home-border)] text-[var(--home-soft)] text-[11px] font-semibold">
-                <CheckCircle2 className="w-3.5 h-3.5 text-[var(--home-accent)]" />
                 {chip}
               </span>
             ))}
@@ -297,7 +291,6 @@ export const Home = ({ onGetStarted }) => {
         <div className="home-marquee-mask overflow-hidden">
           <div className="home-marquee flex gap-5 w-max pb-2">
             {[...SHOWCASE, ...SHOWCASE].map((item, index) => {
-              const Icon = item.icon;
               return (
                 <article
                   key={`${item.title.en}-${index}`}
@@ -311,11 +304,7 @@ export const Home = ({ onGetStarted }) => {
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-transparent" />
                   <div className="absolute inset-0 flex flex-col justify-between p-3.5">
-                    <div className="flex justify-end">
-                      <span className="w-8 h-8 rounded-lg bg-black/40 backdrop-blur-sm border border-white/10 flex items-center justify-center">
-                        <Icon className="w-4 h-4 text-emerald-300" />
-                      </span>
-                    </div>
+                    <div />
                     <div>
                       <h3 className="text-sm font-extrabold text-[#FFFFFF]">{t(item.title.en, item.title.am)}</h3>
                       <p className="text-[11px] text-[#FFFFFF]/80">{t(item.desc.en, item.desc.am)}</p>
@@ -348,15 +337,11 @@ export const Home = ({ onGetStarted }) => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {FEATURES.map((feature) => {
-              const Icon = feature.icon;
               return (
                 <div
                   key={feature.title.en}
                   className={`rounded-2xl border bg-gradient-to-br ${feature.accent} bg-[var(--home-card)] p-5 hover:-translate-y-1 transition-transform duration-300`}
                 >
-                  <span className="w-11 h-11 rounded-xl bg-[var(--home-bg-alt)] border border-[var(--home-border)] flex items-center justify-center mb-4">
-                    <Icon className={`w-5 h-5 ${feature.ring}`} />
-                  </span>
                   <h3 className="text-base font-extrabold text-[var(--home-text)]">{t(feature.title.en, feature.title.am)}</h3>
                   <p className="mt-2 text-[13px] leading-relaxed text-[var(--home-muted)]">{t(feature.body.en, feature.body.am)}</p>
                 </div>
@@ -380,13 +365,11 @@ export const Home = ({ onGetStarted }) => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {STEPS.map((step, index) => {
-              const Icon = step.icon;
               return (
                 <div key={step.title.en} className="relative rounded-2xl border border-[var(--home-border)] bg-[var(--home-card)] p-5">
                   <span className="absolute -top-3 left-5 w-7 h-7 rounded-full bg-gradient-to-br from-emerald-400 to-yellow-500 text-[#0B0F19] text-xs font-black flex items-center justify-center shadow-lg">
                     {index + 1}
                   </span>
-                  <Icon className="w-6 h-6 text-[var(--home-accent)] mt-2 mb-3" />
                   <h3 className="text-sm font-extrabold text-[var(--home-text)]">{t(step.title.en, step.title.am)}</h3>
                   <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--home-muted)]">{t(step.body.en, step.body.am)}</p>
                 </div>
@@ -410,17 +393,12 @@ export const Home = ({ onGetStarted }) => {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {ROLES.map((role) => {
-              const Icon = role.icon;
               return (
                 <div key={role.name.en} className={`rounded-2xl border ${role.border} bg-[var(--home-card)] p-6 flex flex-col`}>
-                  <span className="w-12 h-12 rounded-xl bg-[var(--home-bg-alt)] border border-[var(--home-border)] flex items-center justify-center mb-4">
-                    <Icon className={`w-6 h-6 ${role.tag}`} />
-                  </span>
                   <h3 className="text-lg font-extrabold text-[var(--home-text)]">{t(role.name.en, role.name.am)}</h3>
                   <ul className="mt-4 space-y-2.5 flex-1">
                     {role.points[lang === 'EN' ? 'en' : 'am'].map((point) => (
                       <li key={point} className="flex items-start gap-2 text-[13px] text-[var(--home-soft)]">
-                        <CheckCircle2 className={`w-4 h-4 shrink-0 mt-0.5 ${role.tag}`} />
                         <span>{point}</span>
                       </li>
                     ))}
@@ -444,15 +422,14 @@ export const Home = ({ onGetStarted }) => {
                 key={gateway}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--home-card)] border border-[var(--home-border)] text-[var(--home-soft)] text-xs font-bold"
               >
-                <Smartphone className="w-3.5 h-3.5 text-[var(--home-accent)]" />
                 {gateway}
               </span>
             ))}
           </div>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-5 text-[11px] text-[var(--home-faint)] font-semibold">
-            <span className="inline-flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" />{t('Secured', 'የተጠበቀ')}</span>
-            <span className="inline-flex items-center gap-1.5"><BarChart3 className="w-3.5 h-3.5" />{t('Real-time Balances', 'ቀጥታ ቀሪ ሂሳብ')}</span>
-            <span className="inline-flex items-center gap-1.5"><AlarmClock className="w-3.5 h-3.5" />{t('Due-date Alerts', 'የቀን ማሳሰቢያ')}</span>
+            <span className="inline-flex items-center gap-1.5">{t('Secured', 'የተጠበቀ')}</span>
+            <span className="inline-flex items-center gap-1.5">{t('Real-time Balances', 'ቀጥታ ቀሪ ሂሳብ')}</span>
+            <span className="inline-flex items-center gap-1.5">{t('Due-date Alerts', 'የቀን ማሳሰቢያ')}</span>
           </div>
         </div>
       </section>
@@ -474,7 +451,6 @@ export const Home = ({ onGetStarted }) => {
             className="mt-6 px-8 py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:via-teal-400 hover:to-emerald-500 text-white font-extrabold text-sm shadow-lg shadow-emerald-500/30 hover:scale-[1.03] active:scale-95 transition-all inline-flex items-center gap-2 cursor-pointer"
           >
             <span>{t('Create Your Account', 'መለያ ይክፈቱ')}</span>
-            <ArrowRight className="w-4 h-4" />
           </button>
         </div>
       </section>
