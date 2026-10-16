@@ -252,14 +252,6 @@ export const Home = ({ onGetStarted }) => {
               {t('Explore Features', 'ባህሪያትን ይመልከቱ')}
             </a>
           </div>
-
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-2.5">
-            {['Fayda KYC', 'Secured', 'Audit Trail', 'SMS Reminders'].map((chip) => (
-              <span key={chip} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--home-card)] border border-[var(--home-border)] text-[var(--home-soft)] text-[11px] font-semibold">
-                {chip}
-              </span>
-            ))}
-          </div>
         </div>
       </section>
 
