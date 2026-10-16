@@ -153,8 +153,24 @@ export const Login = () => {
 
   // The auth panel starts hidden. Guests first see the landing hero and only
   // get the sign-in/register forms once they click "Get Started", so the login
-  // page is never shown before the visitor asks for it.
-  const [showAuth, setShowAuth] = useState(false);
+  // page is never shown before the visitor asks for it. After a sign-out, the
+  // marker set by AuthContext opens the sign-in panel straight away instead of
+  // sending the user back to the marketing home.
+  const [showAuth, setShowAuth] = useState(() => {
+    try {
+      return sessionStorage.getItem('smart_dube_after_logout') === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      sessionStorage.removeItem('smart_dube_after_logout');
+    } catch {
+      // Ignore unavailable storage.
+    }
+  }, []);
 
   // Sign In State
   // Prefilled from the last successful sign-in. The password starts empty and is

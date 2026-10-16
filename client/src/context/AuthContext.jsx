@@ -47,6 +47,13 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     localStorage.removeItem('smart_dube_token');
     localStorage.removeItem('smart_dube_user');
+    // Leave a marker so the login page opens straight on the sign-in panel
+    // after a sign-out, instead of dropping the user back on the marketing home.
+    try {
+      sessionStorage.setItem('smart_dube_after_logout', '1');
+    } catch {
+      // Storage can be unavailable (private mode); the home page is a fine fallback.
+    }
     setToken(null);
     setUser(null);
   };
