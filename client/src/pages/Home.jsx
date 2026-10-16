@@ -25,6 +25,9 @@ import {
   TrendingUp
 } from 'lucide-react';
 
+const HERO_IMAGE = '/home-hero.png';
+const SHOWCASE_IMAGE = '/home-showcase.png';
+
 const FEATURES = [
   {
     icon: NotebookPen,
