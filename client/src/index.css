@@ -154,7 +154,7 @@
   min-height: calc(100vh - var(--nav-h, 52px));
   background-image:
     linear-gradient(rgba(11, 15, 25, 0.72), rgba(11, 15, 25, 0.72)),
-    url('/home-hero.png');
+    url('/split-screen.png');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -165,7 +165,7 @@
 [data-theme="light"] .login-page {
   background-image:
     linear-gradient(rgba(248, 250, 252, 0.55), rgba(248, 250, 252, 0.55)),
-    url('/home-hero.png');
+    url('/split-screen.png');
 }
 
 /* The artwork stays visible in the bright theme, but the three bits of text

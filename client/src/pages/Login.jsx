@@ -564,9 +564,9 @@ setError('');
         <div className="split-left w-1/2 h-full bg-[var(--home-bg)] relative hidden lg:block">
           <div className="absolute inset-0 overflow-hidden">
             <img
-              src="/home-hero.png"
-              alt="Ethiopian neighborhood shop"
-              className="w-full h-full object-cover object-left"
+              src="/split-screen.png"
+              alt="Smart Dube digital ledger"
+              className="w-full h-full object-cover object-center"
             />
             <div className="home-hero-scrim absolute inset-0" />
           </div>
