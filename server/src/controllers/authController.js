@@ -735,7 +735,7 @@ async function changePassword(req, res) {
 
   try {
     const user = await db.get(
-      'SELECT id, full_name, phone, password_hash, failed_login_attempts, locked_until FROM users WHERE id = $1',
+      'SELECT id, full_name, phone, email, password_hash, failed_login_attempts, locked_until FROM users WHERE id = $1',
       [req.user.id]
     );
 
@@ -775,6 +775,16 @@ async function changePassword(req, res) {
       resource: 'AUTH',
       details: { phone: user.phone }
     });
+
+    // Fire-and-forget notification email so the HTTP response is not gated on
+    // the relay. A send failure is logged but never surfaced as a failed change.
+    if (user.email) {
+      const { sendPasswordChangedEmail } = require('../services/emailService');
+      sendPasswordChangedEmail({
+        to: user.email,
+        fullName: user.full_name
+      }).catch(err => console.warn('Password-changed email failed:', err.message));
+    }
 
     res.json({ message: 'Password changed successfully.' });
   } catch (err) {

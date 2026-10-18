@@ -1263,6 +1263,45 @@ async function sendNotificationEmail({ to, type, message }) {
   return deliverMessage({ to, subject, text, html });
 }
 
+function buildPasswordChangedEmail({ fullName, appName = 'Smart Dube' }) {
+  const greeting = fullName ? `Hi ${fullName},` : 'Hi,';
+  const subject = `Your ${appName} password was changed`;
+  const text = [
+    greeting,
+    '',
+    'Your password has been changed successfully.',
+    '',
+    'If you made this change, no further action is needed.',
+    'If you did not make this change, please reset your password immediately or contact support.',
+    '',
+    'We will never ask you for your password by email or SMS. If anyone does, it is not us — do not share it.'
+  ].join('\n');
+  const html = `<!doctype html>
+<html>
+  <body style="margin:0;padding:24px;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
+    <div style="max-width:480px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+      <div style="background:#065f46;padding:20px 24px;">
+        <h1 style="margin:0;color:#ffffff;font-size:18px;letter-spacing:-0.01em;">${escapeHtml(appName)}</h1>
+      </div>
+      <div style="padding:24px;">
+        <p style="margin:0 0 16px;font-size:14px;line-height:1.5;">${escapeHtml(greeting)}</p>
+        <p style="margin:0 0 16px;font-size:14px;line-height:1.5;">Your password has been changed successfully.</p>
+        <p style="margin:0 0 16px;font-size:13px;line-height:1.5;color:#334155;">If you made this change, no further action is needed.</p>
+        <p style="margin:0 0 16px;font-size:13px;line-height:1.5;color:#334155;">If you did not make this change, please reset your password immediately or contact support.</p>
+        <p style="margin:0;font-size:12px;line-height:1.5;color:#64748b;">We will never ask you for your password by email or SMS. If anyone does, it is not us — do not share it.</p>
+      </div>
+    </div>
+  </body>
+</html>`;
+  return { subject, text, html };
+}
+
+async function sendPasswordChangedEmail({ to, fullName }) {
+  const cfg = resolveConfig();
+  const { subject, text, html } = buildPasswordChangedEmail({ fullName, appName: cfg.appName });
+  return deliverMessage({ to, subject, text, html });
+}
+
 module.exports = {
   sendOtpEmail,
   sendRegistrationEmail,
@@ -1279,5 +1318,7 @@ module.exports = {
   // Exported for the diagnostic scripts and the provider tests, which need to
   // assert on how a failure is described without sending a message.
   explainHttpApiError,
-  parseFromAddress
+  parseFromAddress,
+  sendPasswordChangedEmail,
+  buildPasswordChangedEmail
 };
