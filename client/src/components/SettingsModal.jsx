@@ -259,6 +259,18 @@ export const SettingsModal = ({ isOpen, onClose }) => {
         {activeTab === 'SECURITY' && (
           <form noValidate onSubmit={handlePasswordChange} className="space-y-4 text-xs">
             <div>
+              <label className="block text-slate-300 font-semibold mb-1">Current Password:</label>
+              <input
+                type="password"
+                value={passwordForm.currentPassword}
+                onChange={e => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                placeholder="Enter current password"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-100 focus:outline-none focus:border-sky-500"
+                required
+              />
+            </div>
+
+            <div>
               <label className="block text-slate-300 font-semibold mb-1">New Password:</label>
               <input
                 type="password"
