@@ -460,6 +460,12 @@ export const Home = ({ onGetStarted }) => {
             <span className="text-sm font-extrabold text-[var(--home-text)]">Smart Dube</span>
           </div>
           <p className="text-[11px] text-[var(--home-faint)]">
+            {t('Contact:', 'መገናኛ:')}{' '}
+            <a href="mailto:admin@smartdube.et" className="hover:text-emerald-500">admin@smartdube.et</a>
+            {' · '}
+            <a href="tel:+251987005355" className="hover:text-emerald-500">+251987005355</a>
+          </p>
+          <p className="text-[11px] text-[var(--home-faint)]">
             Copyright &copy; 2022 - 2026 All Rights Reserved - Developed By Tigist Zinabu.
           </p>
         </div>
