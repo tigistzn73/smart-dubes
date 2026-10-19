@@ -10,35 +10,23 @@ CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     full_name VARCHAR(200) NOT NULL,
     phone VARCHAR(20) UNIQUE NOT NULL,
-    -- Mandatory, not optional. The email is the channel the password-reset OTP is
-    -- delivered to, so an account without one is an account its owner can never
-    -- recover: they would be locked out permanently after forgetting the
-    -- password. Uniqueness is enforced case-insensitively by
-    -- idx_users_email_unique below, since Gmail treats Foo@x.com and
-    -- foo@x.com as one mailbox.
+ .
     email VARCHAR(200) NOT NULL,
     role VARCHAR(20) NOT NULL CHECK (role IN ('ADMIN', 'MERCHANT', 'CUSTOMER')),
     password_hash TEXT NOT NULL,
     fayda_id VARCHAR(50),
     photo_url TEXT,
-    -- Holds a bcrypt hash of the 6-digit reset code, not the code itself, so a
-    -- dump of this table yields no usable reset codes. 60 chars fits
-    -- bcrypt's output; VARCHAR(10) only ever fitted the plaintext PIN.
+ 
     reset_token VARCHAR(72),
     reset_token_expires TIMESTAMPTZ,
-    -- When the current code was emailed. The resend cooldown is enforced
-    -- against this column rather than against a process-local Map: an
-    -- in-memory timer is erased by a deploy, which makes restarting the app a
-    -- way around the limit, and each replica behind a load balancer would
-    -- otherwise enforce its own separate window.
+  
+  
     reset_token_sent_at TIMESTAMPTZ,
-    -- Wrong OTP codes submitted against reset_token. The token is destroyed
-    -- once this hits MAX so a 6-digit code cannot be brute-forced.
+   
     reset_token_attempts INT NOT NULL DEFAULT 0,
-    -- Consecutive failed logins. Kept in the database rather than in process
-    -- memory so the lockout survives a restart and is shared by every replica.
+   
     failed_login_attempts INT NOT NULL DEFAULT 0,
-    -- Set when failed_login_attempts trips the limit. NULL means not locked.
+   
     locked_until TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );

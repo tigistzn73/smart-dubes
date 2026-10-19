@@ -432,10 +432,14 @@ async function getMerchantSMSHistory(req, res) {
       return res.status(404).json({ error: 'Merchant account not linked.' });
     }
 
+    // Rows whose customer_id was nulled by ON DELETE SET NULL still belong to
+    // this merchant's ledger when their phone matches one of its customers, so
+    // they are matched on phone too — otherwise they vanish from every view.
     const rows = await db.all(`
       SELECT s.id, s.customer_id, s.phone, s.type, s.status, s.sent_at, s.message
       FROM sms_notifications s
       WHERE s.customer_id IN (SELECT id FROM customer_profiles WHERE merchant_id = $1)
+         OR (s.customer_id IS NULL AND s.phone IN (SELECT phone FROM customer_profiles WHERE merchant_id = $1))
       ORDER BY s.sent_at DESC
       LIMIT 200
     `, [merchant.id]);

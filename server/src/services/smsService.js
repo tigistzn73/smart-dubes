@@ -135,11 +135,31 @@ async function sendSMS({ customerId, phone, message, type, mediaUrls }) {
   const allowedTypes = ['CREDIT_ISSUED', 'REMINDER', 'OVERDUE_ALERT', 'PAYMENT_RECEIPT', 'COURT_LETTER'];
   const dbType = allowedTypes.includes(type) ? type : 'REMINDER';
 
+  // 1a. A caller that omits customerId must not orphan the row: resolve the
+  //     profile by phone (digits only, so +2519... and 09... match) before the
+  //     insert. Unresolvable phones keep customer_id NULL rather than failing
+  //     the write — history beats a constraint.
+  if (customerId === null || customerId === undefined) {
+    try {
+      const digits = String(phone || '').replace(/\D/g, '').replace(/^251/, '').replace(/^0/, '');
+      const tail = digits.slice(-9);
+      const match = await db.get(`
+        SELECT id FROM customer_profiles
+        WHERE regexp_replace(phone, '[^0-9]', '', 'g') LIKE '%' || $1
+        ORDER BY created_at DESC LIMIT 1
+      `, [tail]);
+      if (match) customerId = match.id;
+      else console.warn(`[SMS] No customer profile for phone ${phone}; notification row keeps customer_id NULL.`);
+    } catch (lookupErr) {
+      console.error('[SMS customer lookup error]:', lookupErr.message);
+    }
+  }
+
   try {
     const result = await db.get(`
       INSERT INTO sms_notifications (customer_id, phone, message, type, status)
       VALUES ($1, $2, $3, $4, $5) RETURNING id
-    `, [customerId, phone, message, dbType, 'PENDING']);
+    `, [customerId ?? null, phone, message, dbType, 'PENDING']);
     dbNotificationId = result.id;
   } catch (dbErr) {
     console.error('[SMS DB Error]:', dbErr.message);
