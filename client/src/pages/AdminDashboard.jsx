@@ -633,11 +633,10 @@ export const AdminDashboard = () => {
 
                   <button
                     onClick={() => handleDeleteMerchant(m)}
-                    className="px-3.5 py-1.5 rounded-xl bg-red-600/10 hover:bg-red-600/30 text-red-400 text-xs font-bold border border-red-500/25 transition-all flex items-center gap-1 cursor-pointer"
+                    className="px-3.5 py-1.5 rounded-xl bg-red-600/10 hover:bg-red-600/30 text-red-400 text-xs font-bold border border-red-500/25 transition-all flex items-center justify-center cursor-pointer"
                     title={t('Delete merchant (ledger archived)', 'ነጋዴ ይጠፉ (ሌጀር ይደበቃል)')}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    <span>{t('Delete', 'ጠፍ')}</span>
                   </button>
                 </div>
               </div>

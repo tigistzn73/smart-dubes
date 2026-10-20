@@ -1674,11 +1674,10 @@ export const MerchantDashboard = () => {
 
                     <button
                       onClick={() => handleDeleteCustomer(customer)}
-                      className="px-2.5 py-1.5 rounded-lg bg-red-600/10 hover:bg-red-600/25 text-red-400 text-xs font-semibold border border-red-500/25 flex items-center justify-center gap-1 transition-all cursor-pointer"
+                      className="px-2.5 py-1.5 rounded-lg bg-red-600/10 hover:bg-red-600/25 text-red-400 text-xs font-semibold border border-red-500/25 flex items-center justify-center transition-all cursor-pointer"
                       title={t('Delete Customer Profile', 'የደንበኛ መገለጫ ይጠፉ')}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
-                      <span>{t('Delete', 'ጠፍ')}</span>
                     </button>
                   </div>
                 </div>
@@ -1767,11 +1766,10 @@ export const MerchantDashboard = () => {
                       {tx.status === 'PENDING' && (
                         <button
                           onClick={() => handleDeleteTransaction(tx)}
-                          className="px-2 py-1 rounded-lg bg-red-600/10 hover:bg-red-600/25 text-red-400 text-[10px] font-bold border border-red-500/25 flex items-center gap-1 transition-all cursor-pointer"
+                          className="px-2 py-1 rounded-lg bg-red-600/10 hover:bg-red-600/25 text-red-400 text-[10px] font-bold border border-red-500/25 flex items-center justify-center transition-all cursor-pointer"
                           title={t('Remove mistyped pending transaction', 'ያልተከፈለ ግዢ ይሰርዙ')}
                         >
                           <Trash2 className="w-3 h-3" />
-                          <span>{t('Remove', 'ሰርዝ')}</span>
                         </button>
                       )}
                     </td>
