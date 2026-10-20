@@ -30,7 +30,8 @@ import {
   ChevronRight,
   Menu,
   Store,
-  Landmark
+  Landmark,
+  Trash2
 } from 'lucide-react';
 import { getErrorMessage, isValidEthiopianPhone } from '../utils/errorHelper';
 
@@ -197,6 +198,57 @@ export const MerchantDashboard = () => {
       setLimitError(getErrorMessage(err));
     } finally {
       setLimitSaving(false);
+    }
+  };
+
+  // Delete a customer profile from this merchant's ledger. The server refuses
+  // while any debt is open, so the error is shown rather than swallowed.
+  const handleDeleteCustomer = async (customer) => {
+    const confirmed = window.confirm(
+      t(
+        `Delete ${customer.full_name} (${customer.phone}) from your ledger?\n\nOnly customers with a 0.00 ETB balance can be deleted. Their repayment history is kept for audit.`,
+        `${customer.full_name} (${customer.phone}) ከሌጀርዎ ላይ ይጠፉ?\n\nዱቤ ቀሪ ሂሳብ 0.00 ብር ባላቸው ብቻ ደንበኞች መጠፋት ይቻላል። የክፍያ ታሪክ ለግምገማ ይቀርራል።`
+      )
+    );
+    if (!confirmed) return;
+    try {
+      const res = await fetch(`/api/merchant/customers/${customer.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(getErrorMessage(data, 'Failed to delete customer'));
+      setCustomers(prev => prev.filter(c => c.id !== customer.id));
+    } catch (err) {
+      alert(getErrorMessage(err));
+    }
+  };
+
+  // Remove a mistyped PENDING credit transaction and restore the balance it
+  // added. Only PENDING, repayment-free transactions qualify on the server.
+  const handleDeleteTransaction = async (tx) => {
+    const confirmed = window.confirm(
+      t(
+        `Remove credit transaction ${tx.transaction_ref} (${tx.total_amount.toFixed(2)} ETB)?\n\nOnly unpaid PENDING transactions can be removed. The customer's balance will be restored.`,
+        `የዱቤ ግዢ ${tx.transaction_ref} (${tx.total_amount.toFixed(2)} ብር) ይሰርዙ?\n\nያልተከፈለ የ PENDING ግዢ ብቻ ይሰረዛል። የደንበኛው ቀሪ ሂሳብ ይመለሳል።`
+      )
+    );
+    if (!confirmed) return;
+    try {
+      const res = await fetch(`/api/merchant/transactions/${tx.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(getErrorMessage(data, 'Failed to delete transaction'));
+      setTransactions(prev => prev.filter(t => t.id !== tx.id));
+      if (data.newBalance !== undefined && data.newBalance !== null) {
+        setCustomers(prev => prev.map(c => (c.id === tx.customer_id
+          ? { ...c, current_balance: data.newBalance }
+          : c)));
+      }
+    } catch (err) {
+      alert(getErrorMessage(err));
     }
   };
 
@@ -1619,6 +1671,15 @@ export const MerchantDashboard = () => {
                       <Send className="w-3.5 h-3.5" />
                       <span>{t('SMS Alert', 'ኤስኤምኤስ ላክ')}</span>
                     </button>
+
+                    <button
+                      onClick={() => handleDeleteCustomer(customer)}
+                      className="px-2.5 py-1.5 rounded-lg bg-red-600/10 hover:bg-red-600/25 text-red-400 text-xs font-semibold border border-red-500/25 flex items-center justify-center gap-1 transition-all cursor-pointer"
+                      title={t('Delete Customer Profile', 'የደንበኛ መገለጫ ይጠፉ')}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>{t('Delete', 'ጠፍ')}</span>
+                    </button>
                   </div>
                 </div>
               );
@@ -1677,6 +1738,7 @@ export const MerchantDashboard = () => {
                   <th className="pb-3">{t('Due Date', 'መክፈያ ቀን')}</th>
                   <th className="pb-3">{t('Status', 'ሁኔታ')}</th>
                   <th className="pb-3">{t('Logged Date', 'የተመዘገበበት ቀን')}</th>
+                  <th className="pb-3"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-slate-200">
@@ -1701,6 +1763,18 @@ export const MerchantDashboard = () => {
                       </span>
                     </td>
                     <td className="py-3.5 text-slate-500 font-mono">{new Date(tx.created_at).toLocaleDateString()}</td>
+                    <td className="py-3.5">
+                      {tx.status === 'PENDING' && (
+                        <button
+                          onClick={() => handleDeleteTransaction(tx)}
+                          className="px-2 py-1 rounded-lg bg-red-600/10 hover:bg-red-600/25 text-red-400 text-[10px] font-bold border border-red-500/25 flex items-center gap-1 transition-all cursor-pointer"
+                          title={t('Remove mistyped pending transaction', 'ያልተከፈለ ግዢ ይሰርዙ')}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>{t('Remove', 'ሰርዝ')}</span>
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

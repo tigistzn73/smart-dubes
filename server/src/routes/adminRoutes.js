@@ -6,7 +6,9 @@ const {
   getPaymentGatewayDiagnostics,
   triggerSimulatedWebhook,
   fetchAuditLogs,
-  runEscalationSweepNow
+  runEscalationSweepNow,
+  deleteMerchant,
+  deleteCustomer
 } = require('../controllers/adminController');
 const { authenticateToken, authorizeRoles } = require('../middleware/auth');
 const { validateResult } = require('../middleware/validate');
@@ -22,5 +24,7 @@ router.get('/gateways', getPaymentGatewayDiagnostics);
 router.post('/webhook-test', triggerSimulatedWebhook);
 router.post('/escalations/run', runEscalationSweepNow);
 router.get('/audit-logs', fetchAuditLogs);
+router.delete('/merchants/:merchantId', deleteMerchant);
+router.delete('/customers/:customerId', deleteCustomer);
 
 module.exports = router;

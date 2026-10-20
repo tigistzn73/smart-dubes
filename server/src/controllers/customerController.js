@@ -35,7 +35,7 @@ async function getCustomerDashboard(req, res) {
              m.bank_name, m.account_name, m.account_number
       FROM customer_profiles cp
       JOIN merchants m ON cp.merchant_id = m.id
-      WHERE cp.phone = $1 OR cp.user_id = $2
+      WHERE (cp.phone = $1 OR cp.user_id = $2) AND cp.deleted_at IS NULL AND m.deleted_at IS NULL
     `, [userPhone, req.user.id]);
 
     if (profiles.length === 0) {
@@ -89,11 +89,12 @@ async function getCustomerDashboard(req, res) {
       ORDER BY r.created_at DESC
     `, [profileIds]);
 
-    // Notifications / Alerts history
+    // Notifications / Alerts history. Rows the customer has dismissed stay in
+    // the table for the merchant's SMS log and audit, but never resurface here.
     const notifications = await db.all(`
       SELECT *
       FROM sms_notifications
-      WHERE phone = $1 OR customer_id = ANY($2::int[])
+      WHERE (phone = $1 OR customer_id = ANY($2::int[])) AND dismissed_at IS NULL
       ORDER BY sent_at DESC
     `, [userPhone, profileIds]);
 
@@ -207,7 +208,7 @@ async function acceptCourtLetter(req, res) {
 
     const userPhone = req.user.phone;
     const profiles = await db.all(
-      `SELECT id FROM customer_profiles WHERE phone = $1 OR user_id = $2`,
+      `SELECT id FROM customer_profiles WHERE (phone = $1 OR user_id = $2) AND deleted_at IS NULL`,
       [userPhone, req.user.id]
     );
     const profileIds = profiles.map(p => p.id);
@@ -239,7 +240,7 @@ async function initiateRepayment(req, res) {
     // only accept the letter from the dashboard. Enforced here so the rule holds
     // even if the client UI is bypassed.
     const profileRows = await db.all(
-      `SELECT id FROM customer_profiles WHERE phone = $1 OR user_id = $2`,
+      `SELECT id FROM customer_profiles WHERE (phone = $1 OR user_id = $2) AND deleted_at IS NULL`,
       [req.user.phone, req.user.id]
     );
     const profileIds = profileRows.map(p => p.id);
@@ -485,7 +486,7 @@ function normalizeTxIds({ txIds, txId }) {
 // receipt belonging to someone else is never scheduled. Preserves the requested order.
 async function loadOwnedPendingTransactions(req, ids) {
   const profiles = await db.all(
-    `SELECT id FROM customer_profiles WHERE phone = $1 OR user_id = $2`,
+    `SELECT id FROM customer_profiles WHERE (phone = $1 OR user_id = $2) AND deleted_at IS NULL`,
     [req.user.phone, req.user.id]
   );
   if (profiles.length === 0) return [];
@@ -654,7 +655,7 @@ async function saveCustomerSchedule(req, res) {
     // referred to the court organization, so no new repayment schedule may be
     // created or modified for it. The customer may only accept the letter.
     const profileRows = await db.all(
-      `SELECT id FROM customer_profiles WHERE phone = $1 OR user_id = $2`,
+      `SELECT id FROM customer_profiles WHERE (phone = $1 OR user_id = $2) AND deleted_at IS NULL`,
       [req.user.phone, req.user.id]
     );
     const profileIds = profileRows.map(p => p.id);
@@ -780,10 +781,119 @@ async function saveCustomerSchedule(req, res) {
   }
 }
 
+// Customer cancels their own repayment schedule. Cancellation is a status
+// change, not a row delete: the plan's installments may already record paid
+// amounts that reconcile against repayments, and the ledger must keep them.
+// The dashboard only lists ACTIVE plans, so a CANCELLED plan disappears for
+// the customer while staying intact for audit.
+async function cancelSchedule(req, res) {
+  const { scheduleId } = req.params;
+
+  try {
+    const schedule = await db.get(
+      'SELECT * FROM customer_schedules WHERE id = $1 AND user_id = $2',
+      [scheduleId, req.user.id]
+    );
+    if (!schedule) {
+      return res.status(404).json({ error: 'Repayment schedule not found.' });
+    }
+
+    if (schedule.status !== 'ACTIVE') {
+      return res.status(409).json({
+        error: `Only active schedules can be cancelled. This one is ${schedule.status.toLowerCase()}.`,
+        status: schedule.status,
+        scheduleId: Number(scheduleId)
+      });
+    }
+
+    const installments = JSON.parse(schedule.installments_json || '[]');
+    const paidCount = installments.filter(i => i.status === 'PAID').length;
+    if (paidCount > 0) {
+      return res.status(409).json({
+        error: `This schedule already has ${paidCount} paid installment(s). Finish paying it, or ask your merchant for a revised plan — it cannot be cancelled.`,
+        paidInstallments: paidCount,
+        scheduleId: Number(scheduleId)
+      });
+    }
+
+    await db.run(`UPDATE customer_schedules SET status = 'CANCELLED', updated_at = NOW() WHERE id = $1`, [scheduleId]);
+
+    try {
+      const { logAudit } = require('../services/auditService');
+      logAudit({
+        userId: req.user.id,
+        actorName: req.user.fullName,
+        action: 'CUSTOMER_SCHEDULE_CANCELLED',
+        resource: `Schedule #${scheduleId}`,
+        details: { totalAmount: schedule.total_amount, frequency: schedule.frequency || 'MONTHLY', transactionId: schedule.transaction_id }
+      });
+    } catch (auditErr) {
+      console.error('Schedule cancel audit error:', auditErr.message);
+    }
+
+    res.json({
+      message: 'Repayment schedule cancelled. Your outstanding Dube is unchanged — you can still pay it directly or build a new plan.',
+      scheduleId: Number(scheduleId)
+    });
+  } catch (err) {
+    console.error('Cancel Schedule Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+// Customer hides one notification from their own portal. The row is stamped,
+// not deleted: the merchant's SMS log, delivery status and the audit trail all
+// keep it, and the merchant never learns or controls what the customer chose
+// to dismiss.
+async function dismissNotification(req, res) {
+  const { notificationId } = req.params;
+
+  try {
+    const profiles = await db.all(
+      `SELECT id FROM customer_profiles WHERE (phone = $1 OR user_id = $2) AND deleted_at IS NULL`,
+      [req.user.phone, req.user.id]
+    );
+    const profileIds = profiles.map(p => p.id);
+
+    const sms = await db.get(
+      `SELECT * FROM sms_notifications
+       WHERE id = $1
+         AND (phone = $2 ${profileIds.length > 0 ? 'OR customer_id = ANY($3::int[])' : ''})
+         AND dismissed_at IS NULL`,
+      profileIds.length > 0 ? [notificationId, req.user.phone, profileIds] : [notificationId, req.user.phone]
+    );
+    if (!sms) {
+      return res.status(404).json({ error: 'Notification not found.' });
+    }
+
+    await db.run('UPDATE sms_notifications SET dismissed_at = NOW() WHERE id = $1', [notificationId]);
+
+    try {
+      const { logAudit } = require('../services/auditService');
+      logAudit({
+        userId: req.user.id,
+        actorName: req.user.fullName,
+        action: 'CUSTOMER_NOTIFICATION_DISMISSED',
+        resource: `SMS #${notificationId}`,
+        details: { type: sms.type, phone: sms.phone, sentAt: sms.sent_at }
+      });
+    } catch (auditErr) {
+      console.error('Notification dismiss audit error:', auditErr.message);
+    }
+
+    res.json({ message: 'Notification dismissed.', notificationId: Number(notificationId) });
+  } catch (err) {
+    console.error('Dismiss Notification Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
 module.exports = {
   getCustomerDashboard,
   initiateRepayment,
   generateInstallmentSchedule,
   saveCustomerSchedule,
-  acceptCourtLetter
+  acceptCourtLetter,
+  cancelSchedule,
+  dismissNotification
 };

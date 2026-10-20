@@ -5,7 +5,9 @@ const {
   initiateRepayment,
   generateInstallmentSchedule,
   saveCustomerSchedule,
-  acceptCourtLetter
+  acceptCourtLetter,
+  cancelSchedule,
+  dismissNotification
 } = require('../controllers/customerController');
 const { authenticateToken, authorizeRoles } = require('../middleware/auth');
 const { validateResult } = require('../middleware/validate');
@@ -49,5 +51,8 @@ router.post(
   ],
   acceptCourtLetter
 );
+
+router.delete('/schedules/:scheduleId', cancelSchedule);
+router.delete('/notifications/:notificationId', dismissNotification);
 
 module.exports = router;

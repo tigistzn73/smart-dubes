@@ -384,12 +384,12 @@ async function loginUser(req, res) {
 
     let merchant = null;
     if (user.role === 'MERCHANT') {
-      merchant = await db.get('SELECT * FROM merchants WHERE user_id = $1', [user.id]);
+      merchant = await db.get('SELECT * FROM merchants WHERE user_id = $1 AND deleted_at IS NULL', [user.id]);
     }
 
     let customerProfile = null;
     if (user.role === 'CUSTOMER') {
-      customerProfile = await db.get('SELECT * FROM customer_profiles WHERE user_id = $1 OR phone = $2', [user.id, user.phone]);
+      customerProfile = await db.get('SELECT * FROM customer_profiles WHERE (user_id = $1 OR phone = $2) AND deleted_at IS NULL', [user.id, user.phone]);
     }
 
     const token = jwt.sign(
@@ -443,9 +443,9 @@ async function getMe(req, res) {
     let customerProfile = null;
 
     if (user.role === 'MERCHANT') {
-      merchant = await db.get('SELECT * FROM merchants WHERE user_id = $1', [user.id]);
+      merchant = await db.get('SELECT * FROM merchants WHERE user_id = $1 AND deleted_at IS NULL', [user.id]);
     } else if (user.role === 'CUSTOMER') {
-      customerProfile = await db.get('SELECT * FROM customer_profiles WHERE user_id = $1 OR phone = $2', [user.id, user.phone]);
+      customerProfile = await db.get('SELECT * FROM customer_profiles WHERE (user_id = $1 OR phone = $2) AND deleted_at IS NULL', [user.id, user.phone]);
     }
 
     res.json({ user: { id: user.id, fullName: user.full_name, phone: user.phone, email: user.email, role: user.role, faydaId: user.fayda_id, photo_url: user.photo_url, photoUrl: user.photo_url, merchant, customerProfile } });

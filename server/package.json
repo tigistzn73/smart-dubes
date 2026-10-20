@@ -11,6 +11,7 @@
     "migrate:escalations": "node src/db/migrate_escalations.js",
     "migrate:auth-lockout": "node src/db/migrate_auth_lockout.js",
     "migrate:email-required": "node src/db/migrate_email_required.js",
+    "migrate:soft-delete": "node src/db/migrate_soft_delete.js",
     "test:otp": "node scripts/test_otp_policy.js",
     "test:otp:http": "node scripts/test_otp_http.js",
     "test:email:required": "node scripts/test_email_mandatory.js",

@@ -146,6 +146,7 @@ async function sendSMS({ customerId, phone, message, type, mediaUrls }) {
       const match = await db.get(`
         SELECT id FROM customer_profiles
         WHERE regexp_replace(phone, '[^0-9]', '', 'g') LIKE '%' || $1
+          AND deleted_at IS NULL
         ORDER BY created_at DESC LIMIT 1
       `, [tail]);
       if (match) customerId = match.id;

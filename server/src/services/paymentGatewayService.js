@@ -213,7 +213,8 @@ async function processRepayment({ transactionId, customerId, amount, gateway, re
         `SELECT cp.id, cp.merchant_id, m.store_name, m.phone as merchant_phone
          FROM customer_profiles cp
          JOIN merchants m ON cp.merchant_id = m.id
-         WHERE (cp.phone = $1 OR cp.user_id = $2) AND cp.merchant_id != $3`,
+         WHERE (cp.phone = $1 OR cp.user_id = $2) AND cp.merchant_id != $3
+           AND cp.deleted_at IS NULL AND m.deleted_at IS NULL`,
         [customer.phone, customer.user_id || null, transaction.merchant_id]
       );
 
@@ -244,7 +245,7 @@ async function processRepayment({ transactionId, customerId, amount, gateway, re
  * Merchant Approves or Rejects a Pending Receipt Upload Payment
  */
 async function approveUploadedReceipt({ repaymentId, action, merchantUserId, actorName }) {
-  const merchant = await db.get('SELECT * FROM merchants WHERE user_id = $1', [merchantUserId]);
+  const merchant = await db.get('SELECT * FROM merchants WHERE user_id = $1 AND deleted_at IS NULL', [merchantUserId]);
   if (!merchant) {
     throw new Error('Merchant profile not found.');
   }
@@ -435,6 +436,7 @@ async function processMultiMerchantRepayment({ userId, userPhone, amount, gatewa
     JOIN merchants m ON cp.merchant_id = m.id
     WHERE (cp.user_id = $1 OR cp.phone = (SELECT phone FROM users WHERE id = $1) OR cp.phone = $2)
       AND cp.current_balance > 0
+      AND cp.deleted_at IS NULL AND m.deleted_at IS NULL
     ORDER BY cp.current_balance DESC
   `, [userId, userPhone || '']);
 

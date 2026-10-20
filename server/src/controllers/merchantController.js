@@ -15,7 +15,7 @@ const {
 // Get merchant profile for current user
 async function getMerchantProfile(req, res) {
   try {
-    const merchant = await db.get('SELECT * FROM merchants WHERE user_id = $1', [req.user.id]);
+    const merchant = await db.get('SELECT * FROM merchants WHERE user_id = $1 AND deleted_at IS NULL', [req.user.id]);
     if (!merchant) {
       return res.status(404).json({ error: 'Merchant profile not found for user.' });
     }
@@ -28,7 +28,7 @@ async function getMerchantProfile(req, res) {
 // Get all customer profiles for a merchant
 async function getMerchantCustomers(req, res) {
   try {
-    const merchant = await db.get('SELECT id FROM merchants WHERE user_id = $1', [req.user.id]);
+    const merchant = await db.get('SELECT id FROM merchants WHERE user_id = $1 AND deleted_at IS NULL', [req.user.id]);
     if (!merchant) {
       return res.status(404).json({ error: 'Merchant account not linked.' });
     }
@@ -39,7 +39,7 @@ async function getMerchantCustomers(req, res) {
         (SELECT COUNT(*) FROM credit_transactions ct WHERE ct.customer_id = c.id AND ct.status IN ('PENDING', 'PARTIALLY_PAID', 'OVERDUE')) as pending_transactions_count,
         (SELECT COUNT(*) FROM credit_transactions ct WHERE ct.customer_id = c.id AND ct.status IN ('PENDING', 'PARTIALLY_PAID', 'OVERDUE') AND ct.due_date < CURRENT_DATE) as overdue_count
       FROM customer_profiles c
-      WHERE c.merchant_id = $1
+      WHERE c.merchant_id = $1 AND c.deleted_at IS NULL
       ORDER BY c.created_at DESC
     `, [merchant.id]);
 
@@ -54,14 +54,17 @@ async function registerCustomerProfile(req, res) {
   const { fullName, phone, faydaId, photoUrl, creditLimit } = req.body;
 
   try {
-    const merchant = await db.get('SELECT id, store_name FROM merchants WHERE user_id = $1', [req.user.id]);
+    const merchant = await db.get('SELECT id, store_name FROM merchants WHERE user_id = $1 AND deleted_at IS NULL', [req.user.id]);
     if (!merchant) {
       return res.status(400).json({ error: 'Only registered merchants can create customer credit profiles.' });
     }
 
-    // Check if phone already registered for this merchant
-    const existing = await db.get('SELECT id FROM customer_profiles WHERE merchant_id = $1 AND phone = $2', [merchant.id, phone]);
-    if (existing) {
+    // Check if phone already registered for this merchant. The unique
+    // (merchant_id, phone) constraint still covers soft-deleted rows, so a
+    // deleted profile with the same phone is revived in place rather than
+    // blocking a re-registration.
+    const existing = await db.get('SELECT * FROM customer_profiles WHERE merchant_id = $1 AND phone = $2', [merchant.id, phone]);
+    if (existing && !existing.deleted_at) {
       return res.status(400).json({ error: 'A customer profile with this phone number already exists in your ledger.' });
     }
 
@@ -76,6 +79,39 @@ async function registerCustomerProfile(req, res) {
     }
     if (!defaultPhoto || !defaultPhoto.trim()) {
       defaultPhoto = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(fullName)}`;
+    }
+
+    if (existing) {
+      // Revive the tombstoned row with the fresh KYC details. The balance stays
+      // as it is: deletion is only ever allowed at zero, and any residue is a
+      // signal to reconcile rather than erase.
+      await db.run(`
+        UPDATE customer_profiles
+        SET user_id = $1, full_name = $2, fayda_id = $3, photo_url = $4, credit_limit = $5, status = 'ACTIVE', deleted_at = NULL
+        WHERE id = $6
+      `, [linkedUser ? linkedUser.id : null, fullName, faydaId, defaultPhoto, limit, existing.id]);
+
+      logAudit({
+        userId: req.user.id,
+        actorName: req.user.fullName,
+        action: 'CUSTOMER_PROFILE_RESTORED',
+        resource: `Customer #${existing.id}`,
+        details: { fullName, phone, faydaId, creditLimit: limit, storeName: merchant.store_name }
+      });
+
+      return res.status(200).json({
+        message: 'A previously deleted profile with this phone number was restored.',
+        customer: {
+          id: existing.id,
+          merchantId: merchant.id,
+          fullName,
+          phone,
+          faydaId,
+          creditLimit: limit,
+          currentBalance: parseFloat(existing.current_balance || 0),
+          status: 'ACTIVE'
+        }
+      });
     }
       
     const result = await db.get(`
@@ -125,11 +161,11 @@ async function updateCustomerProfile(req, res) {
   const { creditLimit, status } = req.body;
 
   try {
-    const merchant = await db.get('SELECT id, store_name FROM merchants WHERE user_id = $1', [req.user.id]);
+    const merchant = await db.get('SELECT id, store_name FROM merchants WHERE user_id = $1 AND deleted_at IS NULL', [req.user.id]);
     if (!merchant) {
       return res.status(400).json({ error: 'Only registered merchants can update customer credit profiles.' });
     }
-    const customer = await db.get('SELECT * FROM customer_profiles WHERE id = $1 AND merchant_id = $2', [customerId, merchant.id]);
+    const customer = await db.get('SELECT * FROM customer_profiles WHERE id = $1 AND merchant_id = $2 AND deleted_at IS NULL', [customerId, merchant.id]);
 
     if (!customer) {
       return res.status(404).json({ error: 'Customer credit profile not found.' });
@@ -199,7 +235,7 @@ async function updateMerchantBankAccount(req, res) {
   const { bankName, accountName, accountNumber } = req.body;
 
   try {
-    const merchant = await db.get('SELECT * FROM merchants WHERE user_id = $1', [req.user.id]);
+    const merchant = await db.get('SELECT * FROM merchants WHERE user_id = $1 AND deleted_at IS NULL', [req.user.id]);
     if (!merchant) {
       return res.status(400).json({ error: 'Only registered merchants can set a bank account.' });
     }
@@ -248,12 +284,12 @@ async function createCreditTransaction(req, res) {
   const { customerId, items, totalAmount, dueDate, notes } = req.body;
 
   try {
-    const merchant = await db.get('SELECT id, store_name FROM merchants WHERE user_id = $1', [req.user.id]);
+    const merchant = await db.get('SELECT id, store_name FROM merchants WHERE user_id = $1 AND deleted_at IS NULL', [req.user.id]);
     if (!merchant) {
       return res.status(400).json({ error: 'Merchant profile required.' });
     }
 
-    const customer = await db.get('SELECT * FROM customer_profiles WHERE id = $1 AND merchant_id = $2', [customerId, merchant.id]);
+    const customer = await db.get('SELECT * FROM customer_profiles WHERE id = $1 AND merchant_id = $2 AND deleted_at IS NULL', [customerId, merchant.id]);
     if (!customer) {
       return res.status(404).json({ error: 'Customer credit profile not found.' });
     }
@@ -336,7 +372,7 @@ async function createCreditTransaction(req, res) {
 // Get merchant ledger transactions
 async function getMerchantTransactions(req, res) {
   try {
-    const merchant = await db.get('SELECT id FROM merchants WHERE user_id = $1', [req.user.id]);
+    const merchant = await db.get('SELECT id FROM merchants WHERE user_id = $1 AND deleted_at IS NULL', [req.user.id]);
     if (!merchant) {
       return res.status(404).json({ error: 'Merchant not found' });
     }
@@ -376,8 +412,8 @@ async function triggerSMSReminder(req, res) {
   const { customerId, customMessage, type } = req.body;
 
   try {
-    const merchant = await db.get('SELECT id, store_name FROM merchants WHERE user_id = $1', [req.user.id]);
-    const customer = await db.get('SELECT * FROM customer_profiles WHERE id = $1 AND merchant_id = $2', [customerId, merchant.id]);
+    const merchant = await db.get('SELECT id, store_name FROM merchants WHERE user_id = $1 AND deleted_at IS NULL', [req.user.id]);
+    const customer = await db.get('SELECT * FROM customer_profiles WHERE id = $1 AND merchant_id = $2 AND deleted_at IS NULL', [customerId, merchant.id]);
 
     if (!customer) {
       return res.status(404).json({ error: 'Customer credit profile not found.' });
@@ -427,7 +463,7 @@ async function triggerSMSReminder(req, res) {
 // another merchant's message log.
 async function getMerchantSMSHistory(req, res) {
   try {
-    const merchant = await db.get('SELECT id FROM merchants WHERE user_id = $1', [req.user.id]);
+    const merchant = await db.get('SELECT id FROM merchants WHERE user_id = $1 AND deleted_at IS NULL', [req.user.id]);
     if (!merchant) {
       return res.status(404).json({ error: 'Merchant account not linked.' });
     }
@@ -435,11 +471,14 @@ async function getMerchantSMSHistory(req, res) {
     // Rows whose customer_id was nulled by ON DELETE SET NULL still belong to
     // this merchant's ledger when their phone matches one of its customers, so
     // they are matched on phone too — otherwise they vanish from every view.
+    // Soft-deleted customers no longer anchor history: their messages leave the
+    // merchant's view with them, which is the point of the delete.
     const rows = await db.all(`
       SELECT s.id, s.customer_id, s.phone, s.type, s.status, s.sent_at, s.message
       FROM sms_notifications s
-      WHERE s.customer_id IN (SELECT id FROM customer_profiles WHERE merchant_id = $1)
-         OR (s.customer_id IS NULL AND s.phone IN (SELECT phone FROM customer_profiles WHERE merchant_id = $1))
+      WHERE (s.customer_id IN (SELECT id FROM customer_profiles WHERE merchant_id = $1 AND deleted_at IS NULL)
+          OR (s.customer_id IS NULL AND s.phone IN (SELECT phone FROM customer_profiles WHERE merchant_id = $1 AND deleted_at IS NULL)))
+        AND s.dismissed_at IS NULL
       ORDER BY s.sent_at DESC
       LIMIT 200
     `, [merchant.id]);
@@ -483,7 +522,7 @@ async function approveRepayment(req, res) {
 
 async function getEscalationCases(req, res) {
   try {
-    const merchant = await db.get('SELECT id FROM merchants WHERE user_id = $1', [req.user.id]);
+    const merchant = await db.get('SELECT id FROM merchants WHERE user_id = $1 AND deleted_at IS NULL', [req.user.id]);
     if (!merchant) {
       return res.status(404).json({ error: 'Merchant account not linked.' });
     }
@@ -499,7 +538,7 @@ async function triggerEscalationWarning(req, res) {
   const { caseId } = req.body;
 
   try {
-    const merchant = await db.get('SELECT id FROM merchants WHERE user_id = $1', [req.user.id]);
+    const merchant = await db.get('SELECT id FROM merchants WHERE user_id = $1 AND deleted_at IS NULL', [req.user.id]);
     if (!merchant) {
       return res.status(404).json({ error: 'Merchant account not linked.' });
     }
@@ -538,7 +577,7 @@ async function triggerCourtLetter(req, res) {
   const { caseId } = req.body;
 
   try {
-    const merchant = await db.get('SELECT id FROM merchants WHERE user_id = $1', [req.user.id]);
+    const merchant = await db.get('SELECT id FROM merchants WHERE user_id = $1 AND deleted_at IS NULL', [req.user.id]);
     if (!merchant) {
       return res.status(404).json({ error: 'Merchant account not linked.' });
     }
@@ -591,7 +630,7 @@ async function resolveEscalationCase(req, res) {
   const { notes } = req.body;
 
   try {
-    const merchant = await db.get('SELECT id FROM merchants WHERE user_id = $1', [req.user.id]);
+    const merchant = await db.get('SELECT id FROM merchants WHERE user_id = $1 AND deleted_at IS NULL', [req.user.id]);
     if (!merchant) {
       return res.status(404).json({ error: 'Merchant account not linked.' });
     }
@@ -617,7 +656,7 @@ async function closeEscalationCase(req, res) {
   const { notes } = req.body;
 
   try {
-    const merchant = await db.get('SELECT id FROM merchants WHERE user_id = $1', [req.user.id]);
+    const merchant = await db.get('SELECT id FROM merchants WHERE user_id = $1 AND deleted_at IS NULL', [req.user.id]);
     if (!merchant) {
       return res.status(404).json({ error: 'Merchant account not linked.' });
     }
@@ -638,6 +677,182 @@ async function closeEscalationCase(req, res) {
   }
 }
 
+// Soft-delete a customer credit profile from the merchant's own ledger.
+// Blocked while any debt is open: the profile is the anchor for transactions,
+// repayments and escalation cases, so removing it under a live balance would
+// orphan money. The row is stamped, never removed, so history stays auditable.
+async function deleteCustomerProfile(req, res) {
+  const { customerId } = req.params;
+
+  try {
+    const merchant = await db.get('SELECT id, store_name FROM merchants WHERE user_id = $1 AND deleted_at IS NULL', [req.user.id]);
+    if (!merchant) {
+      return res.status(404).json({ error: 'Merchant account not linked.' });
+    }
+
+    const customer = await db.get(
+      'SELECT * FROM customer_profiles WHERE id = $1 AND merchant_id = $2 AND deleted_at IS NULL',
+      [customerId, merchant.id]
+    );
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer credit profile not found.' });
+    }
+
+    const balance = parseFloat(customer.current_balance || 0);
+    if (balance > 0) {
+      return res.status(409).json({
+        error: `This customer still owes ${balance.toFixed(2)} ETB. Collect the debt (or block the customer) before deleting the profile.`,
+        currentBalance: balance,
+        customerId: Number(customerId)
+      });
+    }
+
+    const activeTx = await db.get(
+      `SELECT COUNT(*) as count FROM credit_transactions
+       WHERE customer_id = $1 AND status IN ('PENDING', 'PARTIALLY_PAID', 'OVERDUE')`,
+      [customerId]
+    );
+    if (parseInt(activeTx.count || 0) > 0) {
+      return res.status(409).json({
+        error: 'This customer still has open Dube receipts. Settle or remove them before deleting the profile.',
+        openTransactions: parseInt(activeTx.count || 0),
+        customerId: Number(customerId)
+      });
+    }
+
+    await db.run('UPDATE customer_profiles SET deleted_at = NOW() WHERE id = $1', [customerId]);
+
+    logAudit({
+      userId: req.user.id,
+      actorName: req.user.fullName,
+      action: 'CUSTOMER_PROFILE_DELETED',
+      resource: `Customer #${customerId}`,
+      details: { fullName: customer.full_name, phone: customer.phone, storeName: merchant.store_name }
+    });
+
+    res.json({
+      message: 'Customer profile deleted from your ledger. Their repayment history is retained.',
+      customerId: Number(customerId)
+    });
+  } catch (err) {
+    console.error('Delete Customer Profile Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+// Remove a mistyped PENDING credit transaction and unwind the balance it
+// added. Only PENDING transactions with zero repayments against them qualify:
+// anything partially paid or later is real money and must be settled, not
+// deleted. Runs in one transaction so the balance can never disagree with the
+// ledger.
+async function deleteCreditTransaction(req, res) {
+  const { transactionId } = req.params;
+
+  try {
+    const merchant = await db.get('SELECT id, store_name FROM merchants WHERE user_id = $1 AND deleted_at IS NULL', [req.user.id]);
+    if (!merchant) {
+      return res.status(404).json({ error: 'Merchant account not linked.' });
+    }
+
+    const tx = await db.get(
+      'SELECT * FROM credit_transactions WHERE id = $1 AND merchant_id = $2',
+      [transactionId, merchant.id]
+    );
+    if (!tx) {
+      return res.status(404).json({ error: 'Credit transaction not found.' });
+    }
+
+    if (tx.status !== 'PENDING') {
+      return res.status(409).json({
+        error: `Only PENDING transactions can be deleted. This one is ${tx.status}; settle it through repayments instead.`,
+        status: tx.status,
+        transactionId: Number(transactionId)
+      });
+    }
+
+    const repaymentCount = await db.get(
+      'SELECT COUNT(*) as count FROM repayments WHERE transaction_id = $1',
+      [transactionId]
+    );
+    if (parseInt(repaymentCount.count || 0) > 0) {
+      return res.status(409).json({
+        error: 'This transaction already has repayments recorded against it and cannot be deleted.',
+        transactionId: Number(transactionId)
+      });
+    }
+
+    const amount = parseFloat(tx.total_amount);
+    const result = await db.transaction(async (client) => {
+      const del = await client.query('DELETE FROM credit_transactions WHERE id = $1', [transactionId]);
+      const bal = await client.query('SELECT current_balance FROM customer_profiles WHERE id = $1', [tx.customer_id]);
+      const newBalance = Math.max(0, parseFloat(bal.rows[0]?.current_balance || 0) - amount);
+      await client.query('UPDATE customer_profiles SET current_balance = $1 WHERE id = $2', [newBalance, tx.customer_id]);
+      return { rowCount: del.rowCount, newBalance };
+    });
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Credit transaction not found.' });
+    }
+
+    logAudit({
+      userId: req.user.id,
+      actorName: req.user.fullName,
+      action: 'CREDIT_TRANSACTION_DELETED',
+      resource: `Tx #${tx.transaction_ref}`,
+      details: { customerId: tx.customer_id, amount, dueDate: tx.due_date, newBalance: result.newBalance, storeName: merchant.store_name }
+    });
+
+    res.json({
+      message: 'Pending credit transaction removed and the customer balance restored.',
+      transactionId: Number(transactionId),
+      transactionRef: tx.transaction_ref,
+      newBalance: result.newBalance
+    });
+  } catch (err) {
+    console.error('Delete Credit Transaction Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+// Hard-delete one SMS history row belonging to this merchant's customers.
+// Notifications are delivery logs, not financial records; the audit_logs entry
+// written here is the durable trace of the removal.
+async function deleteSMSNotification(req, res) {
+  const { smsId } = req.params;
+
+  try {
+    const merchant = await db.get('SELECT id FROM merchants WHERE user_id = $1 AND deleted_at IS NULL', [req.user.id]);
+    if (!merchant) {
+      return res.status(404).json({ error: 'Merchant account not linked.' });
+    }
+
+    const sms = await db.get(`
+      SELECT s.* FROM sms_notifications s
+      WHERE s.id = $1
+        AND (s.customer_id IN (SELECT id FROM customer_profiles WHERE merchant_id = $2 AND deleted_at IS NULL)
+          OR (s.customer_id IS NULL AND s.phone IN (SELECT phone FROM customer_profiles WHERE merchant_id = $2 AND deleted_at IS NULL)))
+    `, [smsId, merchant.id]);
+    if (!sms) {
+      return res.status(404).json({ error: 'SMS notification not found in your ledger.' });
+    }
+
+    await db.run('DELETE FROM sms_notifications WHERE id = $1', [smsId]);
+
+    logAudit({
+      userId: req.user.id,
+      actorName: req.user.fullName,
+      action: 'SMS_NOTIFICATION_DELETED',
+      resource: `SMS #${smsId}`,
+      details: { phone: sms.phone, type: sms.type, status: sms.status, sentAt: sms.sent_at }
+    });
+
+    res.json({ message: 'SMS notification removed from your history.', smsId: Number(smsId) });
+  } catch (err) {
+    console.error('Delete SMS Notification Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
 module.exports = {
   getMerchantProfile,
   getMerchantCustomers,
@@ -653,5 +868,8 @@ module.exports = {
   triggerEscalationWarning,
   triggerCourtLetter,
   resolveEscalationCase,
-  closeEscalationCase
+  closeEscalationCase,
+  deleteCustomerProfile,
+  deleteCreditTransaction,
+  deleteSMSNotification
 };

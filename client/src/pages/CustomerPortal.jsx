@@ -347,7 +347,41 @@ export const CustomerPortal = () => {
     return false;
   };
 
-  const dismissAlert = (id) => setDismissedAlertIds(prev => [...prev, id]);
+  // Hide a notification from this portal. The optimistic local hide keeps the
+  // click snappy; the server stamps dismissed_at so it never comes back after
+  // a refresh, while the merchant's SMS log keeps the original row.
+  const dismissAlert = (id) => {
+    setDismissedAlertIds(prev => [...prev, id]);
+    fetch(`/api/customer/notifications/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    }).catch(err => console.error('Dismiss notification error:', err));
+  };
+
+  // Cancel an unpaid repayment schedule. The plan disappears from the portal
+  // (the server flips it to CANCELLED); the outstanding Dube itself is
+  // unchanged and can still be paid directly or re-scheduled.
+  const cancelRepaymentSchedule = async (schedule) => {
+    if (!schedule?.id) return;
+    const confirmed = window.confirm(
+      t(
+        'Cancel this repayment schedule?\n\nYour outstanding Dube is unchanged — you can still pay it directly or build a new plan.',
+        'ይህን የክፍያ መርሐ-ግብር ይተዉት?\n\nቀሪ ዕዳዎ አይለወጥም — በቀጥታ መክፈል ወይም አዲስ መርሐ-ግብር መፍጠር ይችላሉ።'
+      )
+    );
+    if (!confirmed) return;
+    try {
+      const res = await fetch(`/api/customer/schedules/${schedule.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const resData = await res.json();
+      if (!res.ok) throw new Error(getErrorMessage(resData, 'Failed to cancel schedule'));
+      await fetchCustomerDashboard();
+    } catch (err) {
+      alert(getErrorMessage(err));
+    }
+  };
 
   const openAlerts = () => {
     setAlertsOpen(true);
@@ -1265,6 +1299,16 @@ export const CustomerPortal = () => {
                             <Clock className="w-3.5 h-3.5 text-sky-600" />
                             <span>{t('Modify / Recalculate Schedule', 'የጊዜ ሰሌዳውን ቀይር / አስተካክል')}</span>
                           </button>
+
+                          {paidCount === 0 && (
+                            <button
+                              onClick={() => cancelRepaymentSchedule(matchingSchedule)}
+                              className="px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer border border-red-200"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                              <span>{t('Cancel Schedule', 'መርሐ-ግብር አቋርጥ')}</span>
+                            </button>
+                          )}
 
                           {activeProfile.current_balance > 0 && (
                             scheduleReferred ? (

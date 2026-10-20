@@ -6,13 +6,13 @@ const { runSweep, WARNING_PERIOD_DAYS } = require('../services/escalationService
 // Get overview stats & merchant KYC queue
 async function getAdminDashboard(req, res) {
   try {
-    const totalMerchantsRes = await db.get('SELECT COUNT(*) as count FROM merchants');
+    const totalMerchantsRes = await db.get('SELECT COUNT(*) as count FROM merchants WHERE deleted_at IS NULL');
     const totalMerchants = parseInt(totalMerchantsRes.count || 0);
 
-    const pendingKycCountRes = await db.get("SELECT COUNT(*) as count FROM merchants WHERE kyc_status = 'PENDING'");
+    const pendingKycCountRes = await db.get("SELECT COUNT(*) as count FROM merchants WHERE kyc_status = 'PENDING' AND deleted_at IS NULL");
     const pendingKycCount = parseInt(pendingKycCountRes.count || 0);
 
-    const totalCustomersRes = await db.get('SELECT COUNT(*) as count FROM customer_profiles');
+    const totalCustomersRes = await db.get('SELECT COUNT(*) as count FROM customer_profiles WHERE deleted_at IS NULL');
     const totalCustomers = parseInt(totalCustomersRes.count || 0);
 
     const totalDubeIssuedRes = await db.get('SELECT SUM(total_amount) as total FROM credit_transactions');
@@ -25,6 +25,7 @@ async function getAdminDashboard(req, res) {
       SELECT m.*, u.full_name as owner_name, u.phone, u.email, u.fayda_id
       FROM merchants m
       JOIN users u ON m.user_id = u.id
+      WHERE m.deleted_at IS NULL
       ORDER BY m.kyc_status ASC, m.id DESC
     `);
 
@@ -142,6 +143,106 @@ async function fetchAuditLogs(req, res) {
   }
 }
 
+// Admin soft-delete of a merchant. The merchants row is stamped, never removed:
+// credit_transactions, repayments and escalation_cases reference it and the
+// ledger must survive for audit. A merchant carrying outstanding customer
+// balance cannot be deleted unless the admin explicitly forces it, because the
+// customers would lose the only record of who issued their Dube.
+async function deleteMerchant(req, res) {
+  const { merchantId } = req.params;
+  const force = req.body && req.body.force === true;
+
+  try {
+    const merchant = await db.get(
+      'SELECT * FROM merchants WHERE id = $1 AND deleted_at IS NULL',
+      [merchantId]
+    );
+    if (!merchant) {
+      return res.status(404).json({ error: 'Merchant record not found.' });
+    }
+
+    const outstandingRes = await db.get(
+      `SELECT COALESCE(SUM(cp.current_balance), 0) as outstanding
+       FROM customer_profiles cp
+       WHERE cp.merchant_id = $1 AND cp.deleted_at IS NULL`,
+      [merchantId]
+    );
+    const outstanding = parseFloat(outstandingRes.outstanding || 0);
+
+    if (outstanding > 0 && !force) {
+      return res.status(409).json({
+        error: `This merchant still has ${outstanding.toFixed(2)} ETB of outstanding customer balance. Delete is blocked to protect the ledger. Retry with { "force": true } only if you intend to archive the merchant anyway.`,
+        outstandingBalance: outstanding,
+        merchantId: Number(merchantId)
+      });
+    }
+
+    await db.run('UPDATE merchants SET deleted_at = NOW() WHERE id = $1', [merchantId]);
+
+    logAudit({
+      userId: req.user.id,
+      actorName: req.user.fullName,
+      action: 'MERCHANT_SOFT_DELETED',
+      resource: `Merchant #${merchantId} (${merchant.store_name})`,
+      details: { storeName: merchant.store_name, kycStatus: merchant.kyc_status, outstandingBalance: outstanding, forced: force }
+    });
+
+    res.json({
+      message: force && outstanding > 0
+        ? 'Merchant archived despite outstanding balance. Their ledger is hidden but retained for audit.'
+        : 'Merchant deleted. Their ledger is hidden but retained for audit.',
+      merchantId: Number(merchantId),
+      outstandingBalance: outstanding,
+      forced: force
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+// Admin soft-delete of a single customer profile. Same ledger-first rule: a
+// profile with a balance cannot be deleted, forced or not, because a balance
+// with no owning profile breaks every repayment allocation path.
+async function deleteCustomer(req, res) {
+  const { customerId } = req.params;
+
+  try {
+    const customer = await db.get(
+      'SELECT * FROM customer_profiles WHERE id = $1 AND deleted_at IS NULL',
+      [customerId]
+    );
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer profile not found.' });
+    }
+
+    const balance = parseFloat(customer.current_balance || 0);
+    if (balance > 0) {
+      return res.status(409).json({
+        error: `This customer still has an outstanding balance of ${balance.toFixed(2)} ETB. Collect the debt before deleting the profile.`,
+        currentBalance: balance,
+        customerId: Number(customerId)
+      });
+    }
+
+    await db.run('UPDATE customer_profiles SET deleted_at = NOW() WHERE id = $1', [customerId]);
+
+    logAudit({
+      userId: req.user.id,
+      actorName: req.user.fullName,
+      action: 'CUSTOMER_PROFILE_SOFT_DELETED',
+      resource: `Customer #${customerId} (${customer.full_name})`,
+      details: { fullName: customer.full_name, phone: customer.phone, merchantId: customer.merchant_id }
+    });
+
+    res.json({
+      message: 'Customer profile deleted. Their repayment history is retained for audit.',
+      customerId: Number(customerId)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
 // Force the overdue-debt sweep to run now instead of waiting for the daily timer.
 // Admin-only: the sweep sends real SMS in live mode, so it must not be
 // reachable by merchants or customers.
@@ -173,5 +274,7 @@ module.exports = {
   getPaymentGatewayDiagnostics,
   triggerSimulatedWebhook,
   fetchAuditLogs,
-  runEscalationSweepNow
+  runEscalationSweepNow,
+  deleteMerchant,
+  deleteCustomer
 };

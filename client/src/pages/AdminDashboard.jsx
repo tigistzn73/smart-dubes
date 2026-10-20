@@ -17,7 +17,8 @@ import {
   Send,
   LayoutDashboard,
   Menu,
-  AlertCircle
+  AlertCircle,
+  Trash2
 } from 'lucide-react';
 import { getErrorMessage } from '../utils/errorHelper';
 
@@ -129,6 +130,42 @@ export const AdminDashboard = () => {
       if (!res.ok) throw new Error(getErrorMessage(data, 'Webhook simulation failed'));
       setWebhookMessage(`Simulated ${testGateway} Webhook event dispatched!`);
       setTimeout(() => setWebhookMessage(''), 4000);
+      fetchAdminData();
+    } catch (err) {
+      setAdminError(getErrorMessage(err));
+    }
+  };
+
+  // Soft-delete a merchant: the ledger is archived and hidden, never removed.
+  // A merchant with outstanding customer balance is refused by the server with
+  // 409; the admin may then explicitly force the archive after a second confirm.
+  const handleDeleteMerchant = async (m) => {
+    const confirmed = window.confirm(
+      t(
+        `Delete merchant "${m.store_name}" (owner: ${m.owner_name})?\n\nTheir ledger will be archived and hidden from every view. Repayment history is kept for audit.`,
+        `ነጋዴ "${m.store_name}" (ባለቤት፦ ${m.owner_name}) ይጠፉ?\n\nሌጀሩ ይደበቃል እና ከሁሉም እይታ ይደቀል። የክፍያ ታሪክ ለግምገማ ይቀርራል።`
+      )
+    );
+    if (!confirmed) return;
+    setAdminError('');
+    try {
+      const doDelete = async (force) => {
+        const res = await fetch(`/api/admin/merchants/${m.id}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(force ? { force: true } : {})
+        });
+        return { res, data: await res.json() };
+      };
+
+      let { res, data } = await doDelete(false);
+      if (!res.ok && res.status === 409 && data.outstandingBalance > 0) {
+        const force = window.confirm(`${data.error}\n\nForce archive the merchant anyway?`);
+        if (!force) return;
+        ({ res, data } = await doDelete(true));
+      }
+      if (!res.ok) throw new Error(getErrorMessage(data, 'Failed to delete merchant'));
+
       fetchAdminData();
     } catch (err) {
       setAdminError(getErrorMessage(err));
@@ -592,6 +629,15 @@ export const AdminDashboard = () => {
                   >
                     <XCircle className="w-3.5 h-3.5" />
                     <span>{t('Reject', 'ውድቅ አድርግ')}</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleDeleteMerchant(m)}
+                    className="px-3.5 py-1.5 rounded-xl bg-red-600/10 hover:bg-red-600/30 text-red-400 text-xs font-bold border border-red-500/25 transition-all flex items-center gap-1 cursor-pointer"
+                    title={t('Delete merchant (ledger archived)', 'ነጋዴ ይጠፉ (ሌጀር ይደበቃል)')}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>{t('Delete', 'ጠፍ')}</span>
                   </button>
                 </div>
               </div>

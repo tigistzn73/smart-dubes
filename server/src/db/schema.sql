@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS merchants (
     bank_name VARCHAR(100),
     account_name VARCHAR(200),
     account_number VARCHAR(50),
+    deleted_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -59,6 +60,7 @@ CREATE TABLE IF NOT EXISTS customer_profiles (
     credit_limit DECIMAL(12, 2) NOT NULL DEFAULT 5000.00,
     current_balance DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
     status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'RESTRICTED', 'BLOCKED')),
+    deleted_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT unique_merchant_customer_phone UNIQUE (merchant_id, phone)
 );
@@ -100,8 +102,9 @@ CREATE TABLE IF NOT EXISTS sms_notifications (
     phone VARCHAR(20) NOT NULL,
     message TEXT NOT NULL,
     type VARCHAR(30) NOT NULL CHECK (type IN ('CREDIT_ISSUED', 'REMINDER', 'OVERDUE_ALERT', 'PAYMENT_RECEIPT', 'COURT_LETTER')),
-status VARCHAR(20) NOT NULL DEFAULT 'SIMULATED' CHECK (status IN ('PENDING', 'SIMULATED', 'DELIVERED', 
-'FAILED')),
+ status VARCHAR(20) NOT NULL DEFAULT 'SIMULATED' CHECK (status IN ('PENDING', 'SIMULATED', 'DELIVERED', 
+ 'FAILED')),
+    dismissed_at TIMESTAMPTZ,
     sent_at TIMESTAMPTZ DEFAULT NOW()
 );
 
