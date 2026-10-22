@@ -201,13 +201,14 @@ export const MerchantDashboard = () => {
     }
   };
 
-  // Delete a customer profile from this merchant's ledger. The server refuses
-  // while any debt is open, so the error is shown rather than swallowed.
+  // Permanently delete a customer profile from this merchant's ledger.
+// This removes the customer and ALL their data (transactions, repayments,
+// escalation cases, SMS notifications) from the database. THIS CANNOT BE UNDONE.
   const handleDeleteCustomer = async (customer) => {
     const confirmed = window.confirm(
       t(
-        `Delete ${customer.full_name} (${customer.phone}) from your ledger?\n\nOnly customers with a 0.00 ETB balance can be deleted. Their repayment history is kept for audit.`,
-        `${customer.full_name} (${customer.phone}) ከሌጀርዎ ላይ ይጠፉ?\n\nዱቤ ቀሪ ሂሳብ 0.00 ብር ባላቸው ብቻ ደንበኞች መጠፋት ይቻላል። የክፍያ ታሪክ ለግምገማ ይቀርራል።`
+        `PERMANENTLY delete ${customer.full_name} (${customer.phone}) from your ledger?\n\nThis will REMOVE the customer and ALL their data (transactions, repayments, escalation cases, SMS notifications) from the database. THIS CANNOT BE UNDONE.`,
+        `${customer.full_name} (${customer.phone}) ከሌጀርዎ ላይ በቂጠል ይጠፉ?\n\nይህ ደንበኛን እና ሁሉንም የእርሱ ውሂብን (ውሂቦች፣ የክፍያዎች፣ የሌላው ውሂቦች፣ SMS ማሳወቂያዎች) ከውሂብ ቤት ያስወግዳል። ይህ ማድረግ አይመለስም።`
       )
     );
     if (!confirmed) return;

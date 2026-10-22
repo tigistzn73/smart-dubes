@@ -143,14 +143,11 @@ async function fetchAuditLogs(req, res) {
   }
 }
 
-// Admin soft-delete of a merchant. The merchants row is stamped, never removed:
-// credit_transactions, repayments and escalation_cases reference it and the
-// ledger must survive for audit. A merchant carrying outstanding customer
-// balance cannot be deleted unless the admin explicitly forces it, because the
-// customers would lose the only record of who issued their Dube.
+// Admin hard-delete of a merchant. This permanently removes the merchant and all
+// associated data (customers, transactions, repayments, escalation cases) via
+// CASCADE DELETE. This action is irreversible.
 async function deleteMerchant(req, res) {
   const { merchantId } = req.params;
-  const force = req.body && req.body.force === true;
 
   try {
     const merchant = await db.get(
@@ -161,48 +158,28 @@ async function deleteMerchant(req, res) {
       return res.status(404).json({ error: 'Merchant record not found.' });
     }
 
-    const outstandingRes = await db.get(
-      `SELECT COALESCE(SUM(cp.current_balance), 0) as outstanding
-       FROM customer_profiles cp
-       WHERE cp.merchant_id = $1 AND cp.deleted_at IS NULL`,
-      [merchantId]
-    );
-    const outstanding = parseFloat(outstandingRes.outstanding || 0);
-
-    if (outstanding > 0 && !force) {
-      return res.status(409).json({
-        error: `This merchant still has ${outstanding.toFixed(2)} ETB of outstanding customer balance. Delete is blocked to protect the ledger. Retry with { "force": true } only if you intend to archive the merchant anyway.`,
-        outstandingBalance: outstanding,
-        merchantId: Number(merchantId)
-      });
-    }
-
-    await db.run('UPDATE merchants SET deleted_at = NOW() WHERE id = $1', [merchantId]);
+    await db.run('DELETE FROM merchants WHERE id = $1', [merchantId]);
 
     logAudit({
       userId: req.user.id,
       actorName: req.user.fullName,
-      action: 'MERCHANT_SOFT_DELETED',
+      action: 'MERCHANT_HARD_DELETED',
       resource: `Merchant #${merchantId} (${merchant.store_name})`,
-      details: { storeName: merchant.store_name, kycStatus: merchant.kyc_status, outstandingBalance: outstanding, forced: force }
+      details: { storeName: merchant.store_name, kycStatus: merchant.kyc_status }
     });
 
     res.json({
-      message: force && outstanding > 0
-        ? 'Merchant archived despite outstanding balance. Their ledger is hidden but retained for audit.'
-        : 'Merchant deleted. Their ledger is hidden but retained for audit.',
-      merchantId: Number(merchantId),
-      outstandingBalance: outstanding,
-      forced: force
+      message: 'Merchant permanently deleted from database along with all associated data.',
+      merchantId: Number(merchantId)
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 }
 
-// Admin soft-delete of a single customer profile. Same ledger-first rule: a
-// profile with a balance cannot be deleted, forced or not, because a balance
-// with no owning profile breaks every repayment allocation path.
+// Admin hard-delete of a customer profile. This permanently removes the customer
+// and all associated data (transactions, repayments, escalation cases, SMS
+// notifications) via CASCADE DELETE. This action is irreversible.
 async function deleteCustomer(req, res) {
   const { customerId } = req.params;
 
@@ -215,27 +192,18 @@ async function deleteCustomer(req, res) {
       return res.status(404).json({ error: 'Customer profile not found.' });
     }
 
-    const balance = parseFloat(customer.current_balance || 0);
-    if (balance > 0) {
-      return res.status(409).json({
-        error: `This customer still has an outstanding balance of ${balance.toFixed(2)} ETB. Collect the debt before deleting the profile.`,
-        currentBalance: balance,
-        customerId: Number(customerId)
-      });
-    }
-
-    await db.run('UPDATE customer_profiles SET deleted_at = NOW() WHERE id = $1', [customerId]);
+    await db.run('DELETE FROM customer_profiles WHERE id = $1', [customerId]);
 
     logAudit({
       userId: req.user.id,
       actorName: req.user.fullName,
-      action: 'CUSTOMER_PROFILE_SOFT_DELETED',
+      action: 'CUSTOMER_PROFILE_HARD_DELETED',
       resource: `Customer #${customerId} (${customer.full_name})`,
       details: { fullName: customer.full_name, phone: customer.phone, merchantId: customer.merchant_id }
     });
 
     res.json({
-      message: 'Customer profile deleted. Their repayment history is retained for audit.',
+      message: 'Customer profile permanently deleted from database along with all associated data.',
       customerId: Number(customerId)
     });
   } catch (err) {

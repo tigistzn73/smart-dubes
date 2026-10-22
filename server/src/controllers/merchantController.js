@@ -677,10 +677,10 @@ async function closeEscalationCase(req, res) {
   }
 }
 
-// Soft-delete a customer credit profile from the merchant's own ledger.
-// Blocked while any debt is open: the profile is the anchor for transactions,
-// repayments and escalation cases, so removing it under a live balance would
-// orphan money. The row is stamped, never removed, so history stays auditable.
+// Hard-delete a customer credit profile from the merchant's own ledger.
+// This permanently removes the customer and all associated data (transactions,
+// repayments, escalation cases, SMS notifications) via CASCADE DELETE.
+// This action is irreversible.
 async function deleteCustomerProfile(req, res) {
   const { customerId } = req.params;
 
@@ -698,40 +698,18 @@ async function deleteCustomerProfile(req, res) {
       return res.status(404).json({ error: 'Customer credit profile not found.' });
     }
 
-    const balance = parseFloat(customer.current_balance || 0);
-    if (balance > 0) {
-      return res.status(409).json({
-        error: `This customer still owes ${balance.toFixed(2)} ETB. Collect the debt (or block the customer) before deleting the profile.`,
-        currentBalance: balance,
-        customerId: Number(customerId)
-      });
-    }
-
-    const activeTx = await db.get(
-      `SELECT COUNT(*) as count FROM credit_transactions
-       WHERE customer_id = $1 AND status IN ('PENDING', 'PARTIALLY_PAID', 'OVERDUE')`,
-      [customerId]
-    );
-    if (parseInt(activeTx.count || 0) > 0) {
-      return res.status(409).json({
-        error: 'This customer still has open Dube receipts. Settle or remove them before deleting the profile.',
-        openTransactions: parseInt(activeTx.count || 0),
-        customerId: Number(customerId)
-      });
-    }
-
-    await db.run('UPDATE customer_profiles SET deleted_at = NOW() WHERE id = $1', [customerId]);
+    await db.run('DELETE FROM customer_profiles WHERE id = $1', [customerId]);
 
     logAudit({
       userId: req.user.id,
       actorName: req.user.fullName,
-      action: 'CUSTOMER_PROFILE_DELETED',
+      action: 'CUSTOMER_PROFILE_HARD_DELETED',
       resource: `Customer #${customerId}`,
       details: { fullName: customer.full_name, phone: customer.phone, storeName: merchant.store_name }
     });
 
     res.json({
-      message: 'Customer profile deleted from your ledger. Their repayment history is retained.',
+      message: 'Customer profile permanently deleted from database along with all associated data.',
       customerId: Number(customerId)
     });
   } catch (err) {
