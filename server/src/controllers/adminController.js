@@ -2,6 +2,7 @@ const db = require('../config/database');
 const { getGatewayLogs, handleGatewayWebhook } = require('../services/paymentGatewayService');
 const { getAuditLogs, logAudit } = require('../services/auditService');
 const { runSweep, WARNING_PERIOD_DAYS } = require('../services/escalationService');
+const { purgeCustomerNotifications, purgeMerchantNotifications } = require('../services/smsService');
 
 // Get overview stats & merchant KYC queue
 async function getAdminDashboard(req, res) {
@@ -158,6 +159,13 @@ async function deleteMerchant(req, res) {
       return res.status(404).json({ error: 'Merchant record not found.' });
     }
 
+    // Erase SMS history for this merchant's customers before deleting profiles.
+    try {
+      await purgeMerchantNotifications(merchantId);
+    } catch (purgeErr) {
+      console.error('[ADMIN] Failed to purge merchant SMS notifications before delete:', purgeErr.message);
+    }
+
     await db.run('DELETE FROM merchants WHERE id = $1', [merchantId]);
 
     logAudit({
@@ -190,6 +198,13 @@ async function deleteCustomer(req, res) {
     );
     if (!customer) {
       return res.status(404).json({ error: 'Customer profile not found.' });
+    }
+
+    // Erase SMS history tied to this profile before hard-deleting it.
+    try {
+      await purgeCustomerNotifications(customerId, customer.phone);
+    } catch (purgeErr) {
+      console.error('[ADMIN] Failed to purge customer SMS notifications before delete:', purgeErr.message);
     }
 
     await db.run('DELETE FROM customer_profiles WHERE id = $1', [customerId]);

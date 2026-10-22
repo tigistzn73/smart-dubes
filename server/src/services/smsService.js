@@ -375,9 +375,56 @@ async function getSMSHistory(customerId = null) {
   return await db.all('SELECT * FROM sms_notifications ORDER BY sent_at DESC LIMIT 100');
 }
 
+// ============================================================
+//  Erasure of SMS history on hard delete
+// ============================================================
+// sms_notifications.customer_id is ON DELETE SET NULL, so deleting a customer
+// profile leaves every message row behind with the phone number and the message
+// text still attached. A delete that promises to erase the customer but keeps
+// their name, phone and outstanding balance in the SMS log is not a delete.
+//
+// These helpers must run BEFORE the profile row is removed, because the SET NULL
+// cascade would otherwise detach the rows and there would be nothing left to
+// match on.
+//
+// Rows belonging to another profile of the same person (the same phone number
+// registered at a different merchant) keep their own customer_id and are left
+// alone: those messages belong to a ledger that still exists.
+async function purgeCustomerNotifications(customerId, phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  const tail = digits.slice(-9);
+  const result = await db.run(
+    `DELETE FROM sms_notifications s
+     WHERE s.customer_id = $1
+        OR (s.customer_id IS NULL AND $2 <> ''
+            AND right(regexp_replace(s.phone, '[^0-9]', '', 'g'), 9) = $2)`,
+    [customerId, tail]
+  );
+  return result.rowCount;
+}
+
+// Same erasure, for every customer profile a merchant owns. Runs before the
+// merchant row goes, because deleting the merchant cascades to the profiles.
+async function purgeMerchantNotifications(merchantId) {
+  const result = await db.run(
+    `DELETE FROM sms_notifications s
+     WHERE s.customer_id IN (SELECT id FROM customer_profiles WHERE merchant_id = $1)
+        OR (s.customer_id IS NULL AND EXISTS (
+              SELECT 1 FROM customer_profiles cp
+              WHERE cp.merchant_id = $1
+                AND right(regexp_replace(cp.phone, '[^0-9]', '', 'g'), 9)
+                  = right(regexp_replace(s.phone, '[^0-9]', '', 'g'), 9)
+            ))`,
+    [merchantId]
+  );
+  return result.rowCount;
+}
+
 module.exports = {
   sendSMS,
   getTemplate,
   getSMSHistory,
-  describeSmsGatewayConfig
+  describeSmsGatewayConfig,
+  purgeCustomerNotifications,
+  purgeMerchantNotifications
 };
