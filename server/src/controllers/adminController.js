@@ -221,6 +221,7 @@ async function deleteCustomer(req, res) {
     // remove it once this was the last profile holding that account, because one
     // phone can be a customer at several merchants.
     await db.transaction(async (client) => {
+      await client.query('DELETE FROM customer_schedules WHERE customer_id = $1', [customerId]);
       await client.query('DELETE FROM customer_profiles WHERE id = $1', [customerId]);
       if (customer.user_id) {
         const remaining = await client.query(

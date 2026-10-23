@@ -220,9 +220,13 @@ export const MerchantDashboard = () => {
       const data = await res.json();
       if (!res.ok) throw new Error(getErrorMessage(data, 'Failed to delete customer'));
       setCustomers(prev => prev.filter(c => c.id !== customer.id));
+      setTransactions(prev => prev.filter(t => t.customer_id !== customer.id));
+      setRepayments(prev => prev.filter(r => r.customer_id !== customer.id));
+      setEscalationCases(prev => prev.filter(e => e.customer_id !== customer.id));
       if (limitModalCustomer?.id === customer.id) {
         setLimitModalCustomer(null);
       }
+      fetchDashboardData();
     } catch (err) {
       alert(getErrorMessage(err));
     }

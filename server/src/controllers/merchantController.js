@@ -706,7 +706,22 @@ async function deleteCustomerProfile(req, res) {
       console.error('[MERCHANT] Failed to purge customer SMS notifications before delete:', purgeErr.message);
     }
 
-    await db.run('DELETE FROM customer_profiles WHERE id = $1', [customerId]);
+    // Same story for customers: the login account is a separate users row. Only
+    // remove it once this was the last profile holding that account, because one
+    // phone can be a customer at several merchants.
+    await db.transaction(async (client) => {
+      await client.query('DELETE FROM customer_schedules WHERE customer_id = $1', [customerId]);
+      await client.query('DELETE FROM customer_profiles WHERE id = $1', [customerId]);
+      if (customer.user_id) {
+        const remaining = await client.query(
+          'SELECT 1 FROM customer_profiles WHERE user_id = $1 LIMIT 1',
+          [customer.user_id]
+        );
+        if (remaining.rowCount === 0) {
+          await client.query("DELETE FROM users WHERE id = $1 AND role = 'CUSTOMER'", [customer.user_id]);
+        }
+      }
+    });
 
     logAudit({
       userId: req.user.id,
