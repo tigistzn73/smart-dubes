@@ -2419,7 +2419,7 @@ export const MerchantDashboard = () => {
               <button
                 type="button"
                 onClick={() => handleDeleteCustomer(limitModalCustomer)}
-                className="px-3 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-400 text-xs font-bold border border-red-500/30 transition-all flex items-center gap-1.5 cursor-pointer ml-auto"
+                className="px-3 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-400 text-xs font-bold border border-red-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
                 title={t('Delete Customer Profile', 'የደንበኛ መገለጫ ይጠፉ')}
               >
                 <Trash2 className="w-3.5 h-3.5" />
