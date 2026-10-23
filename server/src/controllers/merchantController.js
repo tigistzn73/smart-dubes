@@ -1,6 +1,6 @@
 const db = require('../config/database');
 const { evaluateCreditRisk } = require('../services/riskEngine');
-const { sendSMS, getTemplate, purgeCustomerNotifications } = require('../services/smsService');
+const { sendSMS, getTemplate, purgeCustomerNotifications, purgeMerchantNotifications } = require('../services/smsService');
 const { logAudit } = require('../services/auditService');
 const { approveUploadedReceipt } = require('../services/paymentGatewayService');
 const {
@@ -15,9 +15,9 @@ const {
 // Get merchant profile for current user
 async function getMerchantProfile(req, res) {
   try {
-    const merchant = await db.get('SELECT * FROM merchants WHERE user_id = $1 AND deleted_at IS NULL', [req.user.id]);
+    const merchant = await db.get('SELECT * FROM merchants WHERE user_id = $1', [req.user.id]);
     if (!merchant) {
-      return res.status(404).json({ error: 'Merchant profile not found for user.' });
+      return res.status(404).json({ error: 'Merchant account not found.' });
     }
     res.json({ merchant });
   } catch (err) {
@@ -113,6 +113,7 @@ async function registerCustomerProfile(req, res) {
         }
       });
     }
+
       
     const result = await db.get(`
       INSERT INTO customer_profiles (merchant_id, user_id, full_name, phone, fayda_id, photo_url, credit_limit, current_balance, status)
@@ -685,13 +686,13 @@ async function deleteCustomerProfile(req, res) {
   const { customerId } = req.params;
 
   try {
-    const merchant = await db.get('SELECT id, store_name FROM merchants WHERE user_id = $1 AND deleted_at IS NULL', [req.user.id]);
+    const merchant = await db.get('SELECT id, store_name FROM merchants WHERE user_id = $1', [req.user.id]);
     if (!merchant) {
       return res.status(404).json({ error: 'Merchant account not linked.' });
     }
 
     const customer = await db.get(
-      'SELECT * FROM customer_profiles WHERE id = $1 AND merchant_id = $2 AND deleted_at IS NULL',
+      'SELECT * FROM customer_profiles WHERE id = $1 AND merchant_id = $2',
       [customerId, merchant.id]
     );
     if (!customer) {
@@ -734,7 +735,7 @@ async function deleteCreditTransaction(req, res) {
   const { transactionId } = req.params;
 
   try {
-    const merchant = await db.get('SELECT id, store_name FROM merchants WHERE user_id = $1 AND deleted_at IS NULL', [req.user.id]);
+    const merchant = await db.get('SELECT id, store_name FROM merchants WHERE user_id = $1', [req.user.id]);
     if (!merchant) {
       return res.status(404).json({ error: 'Merchant account not linked.' });
     }
@@ -838,6 +839,48 @@ async function deleteSMSNotification(req, res) {
   }
 }
 
+// Permanently delete the signed-in merchant's own account. Like the admin
+// delete, this has to remove the users row as well as the merchants row,
+// otherwise the login survives with no merchant attached.
+async function deleteMyMerchantAccount(req, res) {
+  try {
+    const merchant = await db.get(
+      'SELECT * FROM merchants WHERE user_id = $1 AND deleted_at IS NULL',
+      [req.user.id]
+    );
+    if (!merchant) {
+      return res.status(404).json({ error: 'Merchant account not linked.' });
+    }
+
+    try {
+      await purgeMerchantNotifications(merchant.id);
+    } catch (purgeErr) {
+      console.error('[MERCHANT] Failed to purge merchant SMS notifications before delete:', purgeErr.message);
+    }
+
+    await db.transaction(async (client) => {
+      await client.query('DELETE FROM merchants WHERE id = $1', [merchant.id]);
+      await client.query("DELETE FROM users WHERE id = $1 AND role = 'MERCHANT'", [req.user.id]);
+    });
+
+    logAudit({
+      userId: req.user.id,
+      actorName: req.user.fullName,
+      action: 'MERCHANT_ACCOUNT_SELF_DELETED',
+      resource: `Merchant #${merchant.id} (${merchant.store_name})`,
+      details: { storeName: merchant.store_name }
+    });
+
+    res.json({
+      message: 'Merchant account permanently deleted from the database.',
+      merchantId: merchant.id
+    });
+  } catch (err) {
+    console.error('Delete Merchant Account Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
 module.exports = {
   getMerchantProfile,
   getMerchantCustomers,
@@ -856,5 +899,6 @@ module.exports = {
   closeEscalationCase,
   deleteCustomerProfile,
   deleteCreditTransaction,
-  deleteSMSNotification
+  deleteSMSNotification,
+  deleteMyMerchantAccount
 };

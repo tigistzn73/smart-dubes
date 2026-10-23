@@ -18,7 +18,8 @@ const {
   closeEscalationCase,
   deleteCustomerProfile,
   deleteCreditTransaction,
-  deleteSMSNotification
+  deleteSMSNotification,
+  deleteMyMerchantAccount
 } = require('../controllers/merchantController');
 const { authenticateToken, authorizeRoles } = require('../middleware/auth');
 const { validateResult } = require('../middleware/validate');
@@ -131,5 +132,6 @@ router.put(
 router.delete('/customers/:customerId', deleteCustomerProfile);
 router.delete('/transactions/:transactionId', deleteCreditTransaction);
 router.delete('/sms/:smsId', deleteSMSNotification);
+router.delete('/account', deleteMyMerchantAccount);
 
 module.exports = router;

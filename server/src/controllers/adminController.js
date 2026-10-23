@@ -152,7 +152,7 @@ async function deleteMerchant(req, res) {
 
   try {
     const merchant = await db.get(
-      'SELECT * FROM merchants WHERE id = $1 AND deleted_at IS NULL',
+      'SELECT * FROM merchants WHERE id = $1',
       [merchantId]
     );
     if (!merchant) {
@@ -166,7 +166,17 @@ async function deleteMerchant(req, res) {
       console.error('[ADMIN] Failed to purge merchant SMS notifications before delete:', purgeErr.message);
     }
 
-    await db.run('DELETE FROM merchants WHERE id = $1', [merchantId]);
+    // The merchants row alone is not the account: the login lives in users, and
+    // merchants.user_id references it, not the other way round. Deleting only the
+    // merchants row leaves the owner able to sign in with no merchant attached.
+    // Remove both in one transaction so a failure cannot leave a half-deleted
+    // account behind.
+    await db.transaction(async (client) => {
+      await client.query('DELETE FROM merchants WHERE id = $1', [merchantId]);
+      if (merchant.user_id) {
+        await client.query("DELETE FROM users WHERE id = $1 AND role = 'MERCHANT'", [merchant.user_id]);
+      }
+    });
 
     logAudit({
       userId: req.user.id,
@@ -193,7 +203,7 @@ async function deleteCustomer(req, res) {
 
   try {
     const customer = await db.get(
-      'SELECT * FROM customer_profiles WHERE id = $1 AND deleted_at IS NULL',
+      'SELECT * FROM customer_profiles WHERE id = $1',
       [customerId]
     );
     if (!customer) {
@@ -207,7 +217,21 @@ async function deleteCustomer(req, res) {
       console.error('[ADMIN] Failed to purge customer SMS notifications before delete:', purgeErr.message);
     }
 
-    await db.run('DELETE FROM customer_profiles WHERE id = $1', [customerId]);
+    // Same story for customers: the login account is a separate users row. Only
+    // remove it once this was the last profile holding that account, because one
+    // phone can be a customer at several merchants.
+    await db.transaction(async (client) => {
+      await client.query('DELETE FROM customer_profiles WHERE id = $1', [customerId]);
+      if (customer.user_id) {
+        const remaining = await client.query(
+          'SELECT 1 FROM customer_profiles WHERE user_id = $1 LIMIT 1',
+          [customer.user_id]
+        );
+        if (remaining.rowCount === 0) {
+          await client.query("DELETE FROM users WHERE id = $1 AND role = 'CUSTOMER'", [customer.user_id]);
+        }
+      }
+    });
 
     logAudit({
       userId: req.user.id,
