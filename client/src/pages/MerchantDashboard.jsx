@@ -2323,7 +2323,7 @@ export const MerchantDashboard = () => {
       {limitModalCustomer && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setLimitModalCustomer(null)} />
-          <div className="my-auto relative glass-card rounded-2xl border border-slate-700 w-full max-w-md p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="my-auto relative glass-card rounded-2xl border border-slate-700 w-full max-w-lg p-5 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="font-bold text-slate-100 text-sm">{t('Manage Credit Limit', 'የክሬዲት ወሰን አስተዳድር')}</h3>
@@ -2387,39 +2387,39 @@ export const MerchantDashboard = () => {
               <p className="text-[11px] font-semibold text-emerald-400 bg-emerald-950/20 border border-emerald-500/20 rounded-lg p-2.5">{limitSuccess}</p>
             )}
 
-            <div className="flex flex-wrap items-center gap-2 pt-1">
+            <div className="flex items-center gap-2 pt-1 overflow-x-auto">
               <button
                 onClick={() => saveCustomerUpdate(limitModalCustomer.status)}
                 disabled={limitSaving}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all disabled:opacity-50"
+                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all disabled:opacity-50 whitespace-nowrap"
               >
                 {limitSaving ? t('Saving...', 'በማስቀመጥ ላይ...') : t('Save Limit', 'ወሰን አስቀምጥ')}
               </button>
               <button
                 onClick={() => saveCustomerUpdate('BLOCKED')}
                 disabled={limitSaving || limitModalCustomer.status === 'BLOCKED'}
-                className="px-3 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-400 text-xs font-bold border border-red-500/30 transition-all disabled:opacity-40"
+                className="px-3 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-400 text-xs font-bold border border-red-500/30 transition-all disabled:opacity-40 whitespace-nowrap"
               >
                 {t('Block', 'አጥፋ')}
               </button>
               <button
                 onClick={() => saveCustomerUpdate('ACTIVE')}
                 disabled={limitSaving || limitModalCustomer.status === 'ACTIVE'}
-                className="px-3 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 text-xs font-bold border border-emerald-500/30 transition-all disabled:opacity-40"
+                className="px-3 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 text-xs font-bold border border-emerald-500/30 transition-all disabled:opacity-40 whitespace-nowrap"
               >
                 {t('Unblock', 'ክፈት')}
               </button>
               <button
                 onClick={() => saveCustomerUpdate('RESTRICTED')}
                 disabled={limitSaving || limitModalCustomer.status === 'RESTRICTED'}
-                className="px-3 py-2 rounded-xl bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 text-xs font-bold border border-amber-500/30 transition-all disabled:opacity-40"
+                className="px-3 py-2 rounded-xl bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 text-xs font-bold border border-amber-500/30 transition-all disabled:opacity-40 whitespace-nowrap"
               >
                 {t('Restrict', 'ገደብ')}
               </button>
               <button
                 type="button"
                 onClick={() => handleDeleteCustomer(limitModalCustomer)}
-                className="px-3 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-400 text-xs font-bold border border-red-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-400 text-xs font-bold border border-red-500/30 transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
                 title={t('Delete Customer Profile', 'የደንበኛ መገለጫ ይጠፉ')}
               >
                 <Trash2 className="w-3.5 h-3.5" />
