@@ -1653,25 +1653,15 @@ export const MerchantDashboard = () => {
                       <span>{t('Items', 'እቃዎች')}</span>
                     </button>
 
-                    <div className="inline-flex rounded-lg border border-sky-500/30 bg-sky-600/20 overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={() => openLimitModal(customer)}
-                        className="px-2.5 py-1.5 hover:bg-sky-600/30 text-sky-400 text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer"
-                        title={t('Adjust Credit Limit or Block Customer', 'የክሬዲት ወሰን አስተካክል ወይም ደንበኛውን አጥፋ')}
-                      >
-                        <DollarSign className="w-3.5 h-3.5" />
-                        <span>{t('Limit', 'ወሰን')}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteCustomer(customer)}
-                        className="px-2 py-1.5 border-l border-sky-500/30 hover:bg-red-600/30 text-red-400 hover:text-red-300 transition-all flex items-center justify-center cursor-pointer"
-                        title={t('Delete Customer Profile', 'የደንበኛ መገለጫ ይጠፉ')}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openLimitModal(customer)}
+                      className="px-2.5 py-1.5 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-400 text-xs font-semibold border border-sky-500/30 flex items-center justify-center gap-1 transition-all cursor-pointer"
+                      title={t('Adjust Credit Limit or Block Customer', 'የክሬዲት ወሰን አስተካክል ወይም ደንበኛውን አጥፋ')}
+                    >
+                      <DollarSign className="w-3.5 h-3.5" />
+                      <span>{t('Limit', 'ወሰን')}</span>
+                    </button>
 
                     <button
                       onClick={() => {
@@ -2426,17 +2416,10 @@ export const MerchantDashboard = () => {
               >
                 {t('Restrict', 'ገደብ')}
               </button>
-            </div>
-
-            <div className="border-t border-slate-800/80 pt-3 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-[11px] font-bold text-red-400">{t('Danger Zone', 'አደገኛ ክልል')}</p>
-                <p className="text-[10px] text-slate-500">{t('Permanently remove customer from ledger', 'ደንበኛውን ከሌጀር በቋሚነት ሰርዝ')}</p>
-              </div>
               <button
                 type="button"
                 onClick={() => handleDeleteCustomer(limitModalCustomer)}
-                className="px-3 py-1.5 rounded-xl bg-red-600/15 hover:bg-red-600/30 text-red-400 text-xs font-bold border border-red-500/30 flex items-center gap-1.5 transition-all cursor-pointer"
+                className="px-3 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-400 text-xs font-bold border border-red-500/30 transition-all flex items-center gap-1.5 cursor-pointer ml-auto"
                 title={t('Delete Customer Profile', 'የደንበኛ መገለጫ ይጠፉ')}
               >
                 <Trash2 className="w-3.5 h-3.5" />
