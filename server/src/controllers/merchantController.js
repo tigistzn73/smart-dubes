@@ -710,15 +710,23 @@ async function deleteCustomerProfile(req, res) {
     // remove it once this was the last profile holding that account, because one
     // phone can be a customer at several merchants.
     await db.transaction(async (client) => {
+      // Find customer login user by user_id OR phone
+      const userRes = await client.query(
+        "SELECT id FROM users WHERE (id = $1 OR phone = $2) AND role = 'CUSTOMER' LIMIT 1",
+        [customer.user_id || -1, customer.phone]
+      );
+
       await client.query('DELETE FROM customer_schedules WHERE customer_id = $1', [customerId]);
       await client.query('DELETE FROM customer_profiles WHERE id = $1', [customerId]);
-      if (customer.user_id) {
+
+      if (userRes.rows.length > 0) {
+        const uId = userRes.rows[0].id;
         const remaining = await client.query(
-          'SELECT 1 FROM customer_profiles WHERE user_id = $1 LIMIT 1',
-          [customer.user_id]
+          'SELECT 1 FROM customer_profiles WHERE (user_id = $1 OR phone = $2) AND id != $3 LIMIT 1',
+          [uId, customer.phone, customerId]
         );
         if (remaining.rowCount === 0) {
-          await client.query("DELETE FROM users WHERE id = $1 AND role = 'CUSTOMER'", [customer.user_id]);
+          await client.query("DELETE FROM users WHERE id = $1 AND role = 'CUSTOMER'", [uId]);
         }
       }
     });
