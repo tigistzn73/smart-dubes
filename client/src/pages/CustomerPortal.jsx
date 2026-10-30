@@ -910,82 +910,90 @@ export const CustomerPortal = () => {
           {activeTab === 'MERCHANTS' && (
             <div className="space-y-4">
               <div className="flex justify-between items-center mb-1">
-                <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider">
-                  {t('Your Linked Dube Merchant Ledgers', 'á‹¨á‰°áŒˆáŠ“áŠ™ á‹¨áŠáŒ‹á‹´ á‹±á‰¤ áŠ áŠ«á‹áŠ•á‰¶á‰½')}
+                <h3 className="text-sm font-bold text-slate-300 tracking-wide">
+                  {t('Your Linked Dube Merchant Ledgers', 'የተገናኙ የነጋዴ ዱቤ አካውንቶች')}
                 </h3>
-                <span className="text-xs font-semibold text-slate-400 font-mono">
-                  {profiles.length} {t('Active Ledgers', 'áŒˆá‰£áˆª áŠ áŠ«á‹áŠ•á‰¶á‰½')}
+                <span className="text-xs font-semibold text-slate-400">
+                  <span className="font-mono">{profiles.length}</span> {t('Active Ledgers', 'ገባሪ አካውንቶች')}
                 </span>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {profiles.map(p => {
-                  const creditLimit = parseFloat(p.credit_limit || 0);
-                  const currentBalance = parseFloat(p.current_balance || 0);
-                  const availableLimit = Math.max(0, creditLimit - currentBalance);
-                  const utilization = creditLimit > 0 ? Math.min(100, Math.round((currentBalance / creditLimit) * 100)) : 0;
-                  const allActiveSched = data?.activeSchedules || (data?.activeSchedule ? [data.activeSchedule] : []);
-                  const matchSched = allActiveSched.find(s =>
-                    (s.merchant_id && String(s.merchant_id) === String(p.merchant_id)) ||
-                    (s.customer_id && s.customer_id === p.id) ||
-                    (s.store_name && p.store_name && s.store_name.toLowerCase() === p.store_name.toLowerCase())
-                  );
-                  const hasUnpaidInsts = matchSched && matchSched.installments?.some(i => i.status !== 'PAID');
+              {profiles.length === 0 ? (
+                <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center text-slate-400 space-y-2">
+                  <Store className="w-8 h-8 mx-auto text-slate-600 mb-1" />
+                  <p className="text-sm font-semibold">{t('No linked merchants yet.', 'እስካሁን ምንም የተገናኙ ነጋዴዎች የሉም።')}</p>
+                  <p className="text-xs text-slate-500">{t('Merchants who grant you Dube credit will appear here.', 'የዱቤ ብድር የፈቀዱልዎ ነጋዴዎች እዚህ ይታያሉ።')}</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {profiles.map(p => {
+                    const creditLimit = parseFloat(p.credit_limit || 0);
+                    const currentBalance = parseFloat(p.current_balance || 0);
+                    const availableLimit = Math.max(0, creditLimit - currentBalance);
+                    const utilization = creditLimit > 0 ? Math.min(100, Math.round((currentBalance / creditLimit) * 100)) : 0;
+                    const allActiveSched = data?.activeSchedules || (data?.activeSchedule ? [data.activeSchedule] : []);
+                    const matchSched = allActiveSched.find(s =>
+                      (s.merchant_id && String(s.merchant_id) === String(p.merchant_id)) ||
+                      (s.customer_id && s.customer_id === p.id) ||
+                      (s.store_name && p.store_name && s.store_name.toLowerCase() === p.store_name.toLowerCase())
+                    );
+                    const hasUnpaidInsts = matchSched && matchSched.installments?.some(i => i.status !== 'PAID');
 
-                  return (
-                    <div key={p.id} className="glass-card p-4 sm:p-5 rounded-2xl border border-slate-800 space-y-3.5 hover:border-slate-700 transition-all shadow-md">
-                      {/* Top Row: Store Name & Address */}
-                      <div className="flex justify-between items-start gap-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center font-bold shrink-0">
-                            <Store className="w-5 h-5" />
+                    return (
+                      <div key={p.id} className="glass-card p-4 sm:p-5 rounded-2xl border border-slate-800 space-y-3.5 hover:border-slate-700 transition-all shadow-md">
+                        {/* Top Row: Store Name & Address */}
+                        <div className="flex justify-between items-start gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center font-bold shrink-0">
+                              <Store className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-sm text-slate-100">{p.store_name}</h4>
+                              <p className="text-xs text-slate-400 mt-0.5">{p.store_address}</p>
+                            </div>
                           </div>
-                          <div>
-                            <h4 className="font-bold text-sm text-slate-100">{p.store_name}</h4>
-                            <p className="text-xs text-slate-400 mt-0.5">{p.store_address}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 flex-wrap justify-end">
-                          {hasUnpaidInsts && (
-                            <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-sky-500/20 text-sky-300 border border-sky-500/30 flex items-center gap-1">
-                              <Calendar className="w-2.5 h-2.5" />
-                              {t('Scheduled', 'áˆ°áˆŒá‹³ á‰°á‹­á‹Ÿáˆ')}
+                          <div className="flex items-center gap-2 flex-wrap justify-end">
+                            {hasUnpaidInsts && (
+                              <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-sky-500/20 text-sky-300 border border-sky-500/30 flex items-center gap-1">
+                                <Calendar className="w-2.5 h-2.5" />
+                                {t('Scheduled', 'ሰሌዳ ተይዟል')}
+                              </span>
+                            )}
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              p.status === 'ACTIVE'
+                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                            }`}>
+                              {p.status === 'ACTIVE' ? t('ACTIVE', 'ገባሪ') : (p.status || t('ACTIVE', 'ገባሪ'))}
                             </span>
-                          )}
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold font-mono ${
-                            p.status === 'ACTIVE'
-                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                              : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                          }`}>
-                            {p.status || 'ACTIVE'}
-                          </span>
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Stats Grid: Approved Limit | Dube Debt | Available */}
-                      <div className="grid grid-cols-3 gap-2 p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
-                        <div>
-                          <p className="text-[10px] text-slate-400 font-semibold">{t('Approved Limit:', 'á‹¨á‰°áˆá‰€á‹° áŒˆá‹°á‰¥á¦')}</p>
-                          <p className="font-extrabold text-sky-400 text-xs sm:text-sm font-mono mt-0.5">
-                            {creditLimit.toFixed(2)} <span className="text-[9px] font-sans">ETB</span>
-                          </p>
-                        </div>
-                        <div className="text-center border-x border-slate-800/80 px-1">
-                          <p className="text-[10px] text-slate-400 font-semibold">{t('Dube Debt:', 'á‹¨á‹±á‰¤ áŠ¥á‹³á¦')}</p>
-                          <p className="font-extrabold text-amber-400 text-xs sm:text-sm font-mono mt-0.5">
-                            {currentBalance.toFixed(2)} <span className="text-[9px] font-sans">ETB</span>
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-[10px] text-slate-400 font-semibold">{t('Available:', 'á‰€áˆª áŒˆá‹°á‰¥á¦')}</p>
-                          <p className={`font-extrabold text-xs sm:text-sm font-mono mt-0.5 ${availableLimit === 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                            {availableLimit.toFixed(2)} <span className="text-[9px] font-sans">ETB</span>
-                          </p>
+                        {/* Stats Grid: Approved Limit | Dube Debt | Available */}
+                        <div className="grid grid-cols-3 gap-2 p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
+                          <div>
+                            <p className="text-[10px] text-slate-400 font-semibold">{t('Approved Limit:', 'የተፈቀደ ገደብ፦')}</p>
+                            <p className="font-extrabold text-sky-400 text-xs sm:text-sm font-mono mt-0.5">
+                              {creditLimit.toFixed(2)} <span className="text-[9px] font-sans">ETB</span>
+                            </p>
+                          </div>
+                          <div className="text-center border-x border-slate-800/80 px-1">
+                            <p className="text-[10px] text-slate-400 font-semibold">{t('Dube Debt:', 'የዱቤ እዳ፦')}</p>
+                            <p className="font-extrabold text-amber-400 text-xs sm:text-sm font-mono mt-0.5">
+                              {currentBalance.toFixed(2)} <span className="text-[9px] font-sans">ETB</span>
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[10px] text-slate-400 font-semibold">{t('Available:', 'ቀሪ ገደብ፦')}</p>
+                            <p className={`font-extrabold text-xs sm:text-sm font-mono mt-0.5 ${availableLimit === 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                              {availableLimit.toFixed(2)} <span className="text-[9px] font-sans">ETB</span>
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
