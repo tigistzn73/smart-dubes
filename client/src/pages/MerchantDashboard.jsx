@@ -31,7 +31,8 @@ import {
   Menu,
   Store,
   Landmark,
-  Trash2
+  Trash2,
+  Copy
 } from 'lucide-react';
 import { getErrorMessage, isValidEthiopianPhone } from '../utils/errorHelper';
 
@@ -684,6 +685,14 @@ export const MerchantDashboard = () => {
     return isIosDevice() ? `sms:${number}&body=${message}` : `sms:${number}?body=${message}`;
   };
 
+  // In-app browsers (Telegram, Facebook, Instagram, etc.) block sms: links,
+  // so warn the user instead of letting the button silently do nothing.
+  const isInAppBrowser = () => {
+    if (typeof navigator === 'undefined') return false;
+    const ua = navigator.userAgent || '';
+    return /FBAN|FBAV|Instagram|Line\/|Telegram|Twitter|MicroMessenger|Snapchat|WhatsApp/i.test(ua);
+  };
+
   const copySmsText = async (text) => {
     try {
       if (navigator.clipboard?.writeText) {
@@ -706,6 +715,25 @@ export const MerchantDashboard = () => {
     } catch {
       return false;
     }
+  };
+
+  // Navigate directly instead of relying on the anchor's default action:
+  // some Android browsers swallow sms: clicks inside modals or when the tap
+  // is followed by other work in the same handler.
+  const openNativeSms = () => {
+    if (!smsTarget) return;
+    const body = getSmsPreview(smsTarget);
+    const href = buildSmsHref(smsTarget.phone, body);
+    setSmsFeedback('Opening your Messages app...');
+    setTimeout(() => {
+      copySmsText(`To: ${smsTarget.phone}\nMessage: ${body}`).then((copied) => {
+        if (copied) {
+          setSmsFeedback('If Messages did not open, the message was copied - paste it in your SMS app.');
+        }
+        setTimeout(() => setSmsFeedback(''), 6000);
+      });
+    }, 800);
+    window.location.href = href;
   };
 
   const filteredCustomers = customers.filter(
@@ -2311,13 +2339,9 @@ export const MerchantDashboard = () => {
                       {/* 1. Direct Native Phone SMS app link */}
                       <a
                         href={buildSmsHref(smsTarget.phone, getSmsPreview(smsTarget))}
-                        onClick={() => {
-                          copySmsText(`To: ${smsTarget.phone}\nMessage: ${getSmsPreview(smsTarget)}`).then((copied) => {
-                            setSmsFeedback(copied
-                              ? `Copied SMS text for ${smsTarget.phone} to clipboard!`
-                              : `If your Messages app did not open, open it manually and paste the message for ${smsTarget.phone}.`);
-                            setTimeout(() => setSmsFeedback(''), 5000);
-                          });
+                        onClick={(e) => {
+                          e.preventDefault();
+                          openNativeSms();
                         }}
                         className="py-2.5 px-3 rounded-xl bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-all text-center"
                         title="Open Native Phone Messages App"
@@ -2346,6 +2370,36 @@ export const MerchantDashboard = () => {
                         )}
                       </button>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        copySmsText(`To: ${smsTarget.phone}\nMessage: ${getSmsPreview(smsTarget)}`).then((copied) => {
+                          setSmsFeedback(copied
+                            ? 'Message copied. Open your Messages app and paste it.'
+                            : 'Copy failed. Press and hold the preview text above to copy it manually.');
+                          setTimeout(() => setSmsFeedback(''), 6000);
+                        });
+                      }}
+                      className="w-full py-2 rounded-xl bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-200 text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <Copy className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Copy Message (use if SMS app does not open)</span>
+                    </button>
+
+                    {smsFeedback && (
+                      <p className="text-[11px] text-center font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-2.5">
+                        {smsFeedback}
+                      </p>
+                    )}
+
+                    {isInAppBrowser() && (
+                      <p className="text-[10px] text-center font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5">
+                        You opened Smart Dube inside an app browser (Telegram / Facebook / Instagram). Those
+                        browsers block SMS links. Open this page in Chrome, or use COPY MESSAGE and paste it in
+                        your Messages app.
+                      </p>
+                    )}
 
                     <p className="text-[10px] text-slate-400 text-center px-2">
                       💡 <span className="text-slate-300 font-semibold">Tip:</span> On mobile phones, "Open Phone SMS App" opens your Messages app directly. On desktop browsers, click <span className="text-emerald-400 font-semibold">Open Pick an App</span> or use <span className="text-sky-400 font-semibold">Send via Gateway API</span>.
