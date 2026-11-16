@@ -717,23 +717,49 @@ export const MerchantDashboard = () => {
     }
   };
 
-  // Navigate directly instead of relying on the anchor's default action:
-  // some Android browsers swallow sms: clicks inside modals or when the tap
-  // is followed by other work in the same handler.
+  // Fire an sms: link through a real anchor click. Android Chrome treats a
+  // link click (LINK transition) more reliably than a bare location change.
+  const triggerSmsLink = (href) => {
+    const link = document.createElement('a');
+    link.href = href;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Try sms: with the body, then smsto: (some Android builds only resolve
+  // that scheme), and finally copy the text so the user can paste manually.
   const openNativeSms = () => {
     if (!smsTarget) return;
     const body = getSmsPreview(smsTarget);
-    const href = buildSmsHref(smsTarget.phone, body);
+    const number = String(smsTarget.phone || '').replace(/[^\d+]/g, '');
+    const primary = buildSmsHref(smsTarget.phone, body);
+    const secondary = `smsto:${number}?body=${encodeURIComponent(body)}`;
+    let handedOff = false;
+    const markHandoff = () => {
+      if (document.visibilityState === 'hidden') handedOff = true;
+    };
+    document.addEventListener('visibilitychange', markHandoff);
     setSmsFeedback('Opening your Messages app...');
+    triggerSmsLink(primary);
+
     setTimeout(() => {
-      copySmsText(`To: ${smsTarget.phone}\nMessage: ${body}`).then((copied) => {
-        if (copied) {
-          setSmsFeedback('If Messages did not open, the message was copied - paste it in your SMS app.');
-        }
-        setTimeout(() => setSmsFeedback(''), 6000);
-      });
-    }, 800);
-    window.location.href = href;
+      if (handedOff || document.visibilityState === 'hidden') {
+        document.removeEventListener('visibilitychange', markHandoff);
+        return;
+      }
+      triggerSmsLink(secondary);
+      setTimeout(() => {
+        document.removeEventListener('visibilitychange', markHandoff);
+        if (handedOff || document.visibilityState === 'hidden') return;
+        copySmsText(`To: ${smsTarget.phone}\nMessage: ${body}`).then((copied) => {
+          setSmsFeedback(copied
+            ? 'Your browser blocked the SMS app. The message was copied - paste it into Messages.'
+            : 'Your browser blocked the SMS app. Press and hold the preview above to copy the message.');
+          setTimeout(() => setSmsFeedback(''), 8000);
+        });
+      }, 1500);
+    }, 2500);
   };
 
   const filteredCustomers = customers.filter(
