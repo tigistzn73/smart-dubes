@@ -668,6 +668,46 @@ export const MerchantDashboard = () => {
     return '[Smart Dube] Custom notification from your merchant.';
   };
 
+  // iOS Messages only accepts sms:<number>&body=<text>, while Android expects
+  // sms:<number>?body=<text>. Using the wrong separator makes the link do
+  // nothing on the other platform, so pick the format from the user agent.
+  const isIosDevice = () => {
+    if (typeof navigator === 'undefined') return false;
+    const ua = navigator.userAgent || '';
+    return /iPad|iPhone|iPod/.test(ua) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  };
+
+  const buildSmsHref = (phone, body) => {
+    const number = String(phone || '').replace(/[^\d+]/g, '');
+    const message = encodeURIComponent(body);
+    return isIosDevice() ? `sms:${number}&body=${message}` : `sms:${number}?body=${message}`;
+  };
+
+  const copySmsText = async (text) => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {
+      // Clipboard permission denied - fall through to the legacy path.
+    }
+    try {
+      const el = document.createElement('textarea');
+      el.value = text;
+      el.style.position = 'fixed';
+      el.style.opacity = '0';
+      document.body.appendChild(el);
+      el.select();
+      const copied = document.execCommand('copy');
+      document.body.removeChild(el);
+      return copied;
+    } catch {
+      return false;
+    }
+  };
+
   const filteredCustomers = customers.filter(
     c =>
       c.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -2270,11 +2310,14 @@ export const MerchantDashboard = () => {
                     <div className="grid grid-cols-2 gap-2">
                       {/* 1. Direct Native Phone SMS app link */}
                       <a
-                        href={`sms:${smsTarget.phone}?body=${encodeURIComponent(getSmsPreview(smsTarget))}`}
+                        href={buildSmsHref(smsTarget.phone, getSmsPreview(smsTarget))}
                         onClick={() => {
-                          navigator.clipboard.writeText(`To: ${smsTarget.phone}\nMessage: ${getSmsPreview(smsTarget)}`);
-                          setSmsFeedback(`Copied SMS text for ${smsTarget.phone} to clipboard!`);
-                          setTimeout(() => setSmsFeedback(''), 4000);
+                          copySmsText(`To: ${smsTarget.phone}\nMessage: ${getSmsPreview(smsTarget)}`).then((copied) => {
+                            setSmsFeedback(copied
+                              ? `Copied SMS text for ${smsTarget.phone} to clipboard!`
+                              : `If your Messages app did not open, open it manually and paste the message for ${smsTarget.phone}.`);
+                            setTimeout(() => setSmsFeedback(''), 5000);
+                          });
                         }}
                         className="py-2.5 px-3 rounded-xl bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-all text-center"
                         title="Open Native Phone Messages App"
