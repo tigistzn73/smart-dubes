@@ -192,7 +192,7 @@ const STEPS = [
   }
 ];
 
-const GATEWAYS = ['Telebirr', 'CBE Birr', 'Chapa', 'Cash', 'Receipt Upload'];
+const GATEWAYS = ['Telebirr', 'CBE Birr', 'Chapa', 'Receipt Upload'];
 
 export const Home = ({ onGetStarted }) => {
   const { lang, activeTheme } = useTheme();
