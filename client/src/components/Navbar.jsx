@@ -341,7 +341,7 @@ export const Navbar = () => {
             <button
               onClick={() => window.dispatchEvent(new CustomEvent('open-inbox-alerts'))}
               className="relative px-2.5 py-1.5 rounded-xl border border-slate-700/60 bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 hover:text-white transition-all flex items-center gap-2 cursor-pointer shadow-md text-xs font-bold"
-              title="Inbox Alerts"
+              title={t('Inbox Alerts', 'የገቢ መልዕክቶች')}
             >
               <div className="relative">
                 <Bell className="w-4 h-4 text-amber-400" />
@@ -351,7 +351,7 @@ export const Navbar = () => {
                   </span>
                 )}
               </div>
-              <span className="hidden sm:inline">Inbox Alerts</span>
+              <span className="hidden sm:inline">{t('Inbox Alerts', 'የገቢ መልዕክቶች')}</span>
             </button>
           )}
 

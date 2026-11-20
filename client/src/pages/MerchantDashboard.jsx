@@ -663,10 +663,16 @@ export const MerchantDashboard = () => {
   const getSmsPreview = (customer) => {
     if (customSmsMessage.trim()) return customSmsMessage.trim();
     if (smsType === 'REMINDER')
-      return `[Smart Dube Alert] Dear ${customer.full_name}, your Dube credit repayment of ${customer.current_balance.toFixed(2)} ETB is due. Pay via Telebirr / CBE Birr to maintain your credit limit.`;
+      return t(
+        `[Smart Dube Alert] Dear ${customer.full_name}, your Dube credit repayment of ${customer.current_balance.toFixed(2)} ETB is due. Pay via Telebirr / CBE Birr to maintain your credit limit.`,
+        `[Smart Dube ማሳሰቢያ] ውድ ${customer.full_name}፣ ${customer.current_balance.toFixed(2)} ብር የዱቤ ክፍያዎ መከፈል አለበት። ንቁ የዱቤ ገደብዎን ለመጠበቅ በTelebirr / CBE Birr ይክፈሉ።`
+      );
     if (smsType === 'OVERDUE_ALERT')
-      return `[Smart Dube URGENT] ${customer.full_name}, your Dube debt of ${customer.current_balance.toFixed(2)} ETB is OVERDUE! New credit purchases are RESTRICTED. Please settle immediately.`;
-    return '[Smart Dube] Custom notification from your merchant.';
+      return t(
+        `[Smart Dube URGENT] ${customer.full_name}, your Dube debt of ${customer.current_balance.toFixed(2)} ETB is OVERDUE! New credit purchases are RESTRICTED. Please settle immediately.`,
+        `[Smart Dube አስቸኳይ] ${customer.full_name}፣ ${customer.current_balance.toFixed(2)} ብር የዱቤ እዳዎ ጊዜው አልፏል! አዲስ የዱቤ ግዢዎች ታግደዋል። እባክዎን ወዲያውኑ ይክፈሉ።`
+      );
+    return t('[Smart Dube] Custom notification from your merchant.', '[Smart Dube] ከነጋዴዎ የመጣ ብጁ ማሳወቂያ።');
   };
 
   // iOS Messages only accepts sms:<number>&body=<text>, while Android expects

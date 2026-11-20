@@ -20,6 +20,119 @@ import {
 } from 'lucide-react';
 import { getErrorMessage } from '../utils/errorHelper';
 
+const localizedSmsPatterns = {
+  CREDIT_ISSUED: [
+    [
+      /^\[Smart Dube\] Welcome (.+?)! You have been registered for Dube credit at (.+?) with a max limit of ([\d,.]+) ETB\.$/,
+      ([name, store, limit]) => `[Smart Dube] እንኳን ደህና መጡ ${name}! በ${store} ከፍተኛው ${limit} ብር የዱቤ ገደብ ተመዝግበዋል።`
+    ],
+    [
+      /^\[Smart Dube Notification\] New credit transaction logged at (.+?): ([\d,.]+) ETB on (.+?)\. Total Balance: ([\d,.]+) ETB\. Due: (.+?)\.$/,
+      ([store, amount, date, balance, due]) =>
+        `[Smart Dube ማሳወቂያ] በ${store} አዲስ የዱቤ ግብይት ተመዝግቧል፦ ${date} በ${amount} ብር። ጠቅላላ ሒሳብ፦ ${balance} ብር። የመከፈያ ቀን፦ ${due}።`
+    ]
+  ],
+  REMINDER: [
+    [
+      /^\[Smart Dube Alert\] Dear (.+?), your Dube credit repayment of ([\d,.]+) ETB to (.+?) is due on (.+?)\. Pay via Telebirr \/ CBE Birr to maintain active credit limit\.$/,
+      ([name, amount, store, due]) =>
+        `[Smart Dube ማሳሰቢያ] ውድ ${name}፣ ወደ ${store} ያለው የዱቤ ክፍያ ${amount} ብር በ${due} መከፈል አለበት። ንቁ የዱቤ ገደብዎን ለመጠበቅ በTelebirr / CBE Birr ይክፈሉ።`
+    ]
+  ],
+  OVERDUE_ALERT: [
+    [
+      /^\[Smart Dube URGENT\] (.+?), your Dube debt of ([\d,.]+) ETB at (.+?) is OVERDUE! New credit purchases are currently RESTRICTED\. Please settle immediately\.$/,
+      ([name, amount, store]) =>
+        `[Smart Dube አስቸኳይ] ${name}፣ በ${store} ያለው ${amount} ብር የዱቤ እዳዎ ጊዜው አልፏል! አዲስ የዱቤ ግዢዎች በአሁኑ ጊዜ ታግደዋል። እባክዎን ወዲያውኑ ይክፈሉ።`
+    ]
+  ],
+  PAYMENT_RECEIPT: [
+    [
+      /^\[Smart Dube Receipt\] Thank you (.+?)! Payment of ([\d,.]+) ETB via (.+?) received for (.+?)\. Ref: (.+?)\. Remaining balance: ([\d,.]+) ETB\.$/,
+      ([name, amount, gateway, store, ref, balance]) =>
+        `[Smart Dube ደረሰኝ] አመሰግናለሁ ${name}! ለ${store} በ${gateway} የተደረገው ${amount} ብር ክፍያ ደርሷል። ማጣቀሻ፦ ${ref}። ቀሪ ሒሳብ፦ ${balance} ብር።`
+    ],
+    [
+      /^\[Smart Dube\] Dear (.+?), your payment receipt of ([\d,.]+) ETB has been uploaded to (.+?)\. Status: PENDING merchant approval\.$/,
+      ([name, amount, store]) =>
+        `[Smart Dube] ውድ ${name}፣ ${amount} ብር የክፍያ ደረሰኝዎ ለ${store} ተስቀምጧል። ሁኔታ፦ የነጋዴ ማፅደቅ በመጠበቅ ላይ።`
+    ],
+    [
+      /^\[Smart Dube\] Dear (.+?), your payment receipt of ([\d,.]+) ETB for (.+?) has been uploaded\. Status: PENDING merchant approval\.$/,
+      ([name, amount, store]) =>
+        `[Smart Dube] ውድ ${name}፣ ${amount} ብር የክፍያ ደረሰኝዎ ለ${store} ተስቀምጧል። ሁኔታ፦ የነጋዴ ማፅደቅ በመጠበቅ ላይ።`
+    ],
+    [
+      /^\[Smart Dube\] Dear (.+?), your multi-store schedule payment of ([\d,.]+) ETB to (.+?) via (.+?) is CONFIRMED\. Ref: (.+?)\.$/,
+      ([name, amount, store, gateway, ref]) =>
+        `[Smart Dube] ውድ ${name}፣ በ${gateway} ለ${store} የተደረገው ${amount} ብር የበርካት መደብር መርሐ-ግብር ክፍያ ተረጋግጧል። ማጣቀሻ፦ ${ref}።`
+    ],
+    [
+      /^\[Smart Dube\] Payment Receipt Approved! Your payment of ([\d,.]+) ETB via (.+?) has been verified and approved by (.+?)\. Ref: (.+?)\. Remaining Dube Balance: ([\d,.]+) ETB\.$/,
+      ([amount, gateway, store, ref, balance]) =>
+        `[Smart Dube] የክፍያ ደረሰኝዎ ፀድቋል! በ${gateway} የተደረገው ${amount} ብር ክፍያ በ${store} ተረጋግጧል። ማጣቀሻ፦ ${ref}። ቀሪ የዱቤ ሒሳብ፦ ${balance} ብር።`
+    ],
+    [
+      /^\[Smart Dube\] Payment Receipt Declined\. Your uploaded receipt of ([\d,.]+) ETB was declined by (.+?)\. Please re-upload a valid receipt or pay via Telebirr\/CBE\.$/,
+      ([amount, store]) =>
+        `[Smart Dube] የክፍያ ደረሰኝዎ ውድቅ ሆኗል። ${amount} ብር የላኩት ደረሰኝ በ${store} ውድቅ ተደርጓል። እባክዎን ትክክለኛ ደረሰኝ እንደገና ያስገቡ ወይም በTelebirr/CBE ይክፈሉ።`
+    ],
+    [
+      /^\[Smart Dube\] Payment Notice: Your customer (.+?) paid ([\d,.]+) ETB to (.+?) via (.+?)\. Ref: (.+?)\. Their remaining total Dube balance: ([\d,.]+) ETB\.$/,
+      ([name, amount, store, gateway, ref, balance]) =>
+        `[Smart Dube] የክፍያ ማሳወቂያ፦ ደንበኛዎ ${name} በ${gateway} ${amount} ብር ለ${store} ከፍሏል። ማጣቀሻ፦ ${ref}። ጠቅላላ ቀሪ የዱቤ ሒሳባቸው፦ ${balance} ብር።`
+    ],
+    [
+      /^\[Smart Dube\] Payment Receipt: Customer (.+?) has paid ([\d,.]+) ETB to your store via (.+?)\. Ref: (.+?)\.$/,
+      ([name, amount, gateway, ref]) =>
+        `[Smart Dube] የክፍያ ደረሰኝ፦ ደንበኛ ${name} በ${gateway} ${amount} ብር ለመደብርዎ ከፍሏል። ማጣቀሻ፦ ${ref}።`
+    ]
+  ],
+  COURT_LETTER: [
+    [
+      /^\[Smart Dube LEGAL NOTICE\] (.+?), a final court letter \(Ref (.+?)\) for your overdue Dube of ([\d,.]+) ETB at (.+?) has been issued and is now on your Smart Dube page\. You have (\d+) days to settle in full\. Failure to pay will result in legal action\.$/,
+      ([name, ref, amount, store, days]) =>
+        `[Smart Dube የህግ ማሳወቂያ] ${name}፣ በ${store} ላለው ${amount} ብር የዘገየ ዱቤዎ የመጨረሻ የፍርድ ቤት ደብዳቤ (ማጣቀሻ ${ref}) ተሰጥቷል እና በSmart Dube ገጽዎ ላይ ይገኛል። ሙሉውን ለመክፈል ${days} ቀናት አለዎት። ካልከፈሉ የህግ እርምጃ ይወሰዳል።`
+    ]
+  ]
+};
+
+const notificationTypeLabels = {
+  EN: {
+    COURT_LETTER: '⚖️ Court Letter Notice',
+    OVERDUE_ALERT: '⚠️ Critical Overdue Warning',
+    REMINDER: '📅 Repayment Reminder',
+    CREDIT_ISSUED: '💳 New Credit Logged',
+    PAYMENT_RECEIPT: '🧾 Payment Receipt Confirmed',
+    DEFAULT: '💬 Store Alert'
+  },
+  AM: {
+    COURT_LETTER: '⚖️ የፍርድ ቤት ደብዳቤ ማሳወቂያ',
+    OVERDUE_ALERT: '⚠️ ወሳኝ የዘገየ እዳ ማስጠንቀቂያ',
+    REMINDER: '📅 የክፍያ ማሳሰቢያ',
+    CREDIT_ISSUED: '💳 አዲስ ዱቤ ተመዝግቧል',
+    PAYMENT_RECEIPT: '🧾 የክፍያ ደረሰኝ ተረጋግጧል',
+    DEFAULT: '💬 የመደብር ማሳወቂያ'
+  }
+};
+
+const getLocalizedNotificationMessage = (notification, lang) => {
+  const message = notification?.message || '';
+  if (lang === 'EN') return message;
+  if (notification?.message_am) return notification.message_am;
+
+  for (const [pattern, translate] of localizedSmsPatterns[notification?.type] || []) {
+    const match = message.match(pattern);
+    if (match) return translate(match.slice(1));
+  }
+  return message;
+};
+
+const getNotificationTypeLabel = (type, lang) => {
+  const labels = notificationTypeLabels[lang] || notificationTypeLabels.EN;
+  return labels[type] || labels.DEFAULT;
+};
+
 export const CustomerPortal = () => {
   const { user } = useAuth();
   const [data, setData] = useState(null);
@@ -2167,7 +2280,7 @@ export const CustomerPortal = () => {
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
                 <Bell className="w-5 h-5 text-amber-400" />
-                Merchant Warning Alerts & Notices ({visibleNotifications.length})
+                {t('Merchant Warning Alerts & Notices', 'የነጋዴ ማስጠንቀቂያዎች እና ማሳወቂያዎች')} ({visibleNotifications.length})
               </h3>
               <button
                 onClick={() => setAlertsOpen(false)}
@@ -2181,7 +2294,7 @@ export const CustomerPortal = () => {
             <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
               {visibleNotifications.length === 0 ? (
                 <div className="text-center py-8 text-slate-500 text-xs bg-slate-900/30 rounded-xl border border-slate-900 p-4">
-                  📭 You have no warning alerts or SMS notifications from your merchants yet.
+                  {t('📭 You have no warning alerts or SMS notifications from your merchants yet.', '📭 እስካሁን ከነጋዴዎችዎ ምንም የማስጠንቀቂያ ኤስኤምኤስ ወይም ማሳወቂያ የለዎትም።')}
                 </div>
               ) : (
                 visibleNotifications.map(n => {
@@ -2212,18 +2325,13 @@ export const CustomerPortal = () => {
                       <div className="flex-1 space-y-1">
                         <div className="flex justify-between items-center text-[10px] uppercase font-mono tracking-wider font-extrabold">
                           <span className={isCritical ? 'text-red-400' : isReminder ? 'text-amber-400' : 'text-slate-400'}>
-                            {n.type === 'COURT_LETTER' && '⚖️ Court Letter Notice'}
-                            {n.type === 'OVERDUE_ALERT' && '⚠️ Critical Overdue Warning'}
-                            {n.type === 'REMINDER' && '📅 Repayment Reminder'}
-                            {n.type === 'CREDIT_ISSUED' && '💳 New Credit Logged'}
-                            {n.type === 'PAYMENT_RECEIPT' && '🧾 Payment Receipt Confirmed'}
-                            {!['COURT_LETTER', 'OVERDUE_ALERT', 'REMINDER', 'CREDIT_ISSUED', 'PAYMENT_RECEIPT'].includes(n.type) && '💬 Store Alert'}
+                            {getNotificationTypeLabel(n.type, lang)}
                           </span>
                           <span className="text-slate-500 font-normal normal-case">
-                            {new Date(n.sent_at).toLocaleString()}
+                            {new Date(n.sent_at).toLocaleString(lang === 'AM' ? 'am-ET' : undefined)}
                           </span>
                         </div>
-                        <p className="text-xs leading-relaxed font-sans">{n.message}</p>
+                        <p className="text-xs leading-relaxed font-sans">{getLocalizedNotificationMessage(n, lang)}</p>
                         {isCourtLetter && activeCourtLetters.length > 0 && (
                           <button
                             onClick={() => {
@@ -2236,18 +2344,18 @@ export const CustomerPortal = () => {
                           </button>
                         )}
                         <div className="flex justify-between items-center pt-1 border-t border-slate-800/40 text-[9px] font-mono text-slate-500">
-                          <span>Phone: {n.phone}</span>
+                          <span>{t('Phone', 'ስልክ')}: {n.phone}</span>
                           <div className="flex items-center gap-2">
                             <span className={`px-1.5 py-0.5 rounded font-bold uppercase ${
                               n.status === 'DELIVERED' || n.status === 'Success'
                                 ? 'bg-emerald-500/10 text-emerald-400'
                                 : 'bg-slate-800 text-slate-400'
                             }`}>
-                              Status: {n.status}
+                              {t('Status', 'ሁኔታ')}: {n.status}
                             </span>
                             <button
                               onClick={() => dismissAlert(n.id)}
-                              title="Remove notification"
+                              title={t('Remove notification', 'ማሳወቂያ አስወግድ')}
                               className="ml-1 text-slate-600 hover:text-red-400 transition-colors"
                             >
                               <X className="w-3.5 h-3.5" />
@@ -2265,7 +2373,7 @@ export const CustomerPortal = () => {
               onClick={() => setAlertsOpen(false)}
               className="w-full py-2.5 rounded-xl bg-slate-850 hover:bg-slate-800 text-slate-200 text-xs font-bold transition-all cursor-pointer"
             >
-              Close Alerts Feed
+              {t('Close Alerts Feed', 'የማሳወቂያ ዝርዝር ዝጋ')}
             </button>
           </div>
         </div>
